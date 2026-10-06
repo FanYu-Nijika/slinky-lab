@@ -1,0 +1,17 @@
+.git
+.venv
+.cache
+data
+**/__pycache__
+**/.pytest_cache
+**/node_modules
+**/.npm-cache
+**/dist
+**/test-results
+**/playwright-report
+.env
+*.log
+reports
+.test-tmp
+manual-security-check
+MUJOCO_LOG.TXT

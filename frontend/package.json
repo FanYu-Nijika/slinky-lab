@@ -1,0 +1,28 @@
+{
+  "name": "slinky-lab-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "echarts": "5.6.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "three": "0.172.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.51.1",
+    "@types/react": "18.3.18",
+    "@types/react-dom": "18.3.5",
+    "@types/three": "0.172.0",
+    "@vitejs/plugin-react": "4.3.4",
+    "typescript": "5.7.3",
+    "vite": "6.1.0"
+  }
+}

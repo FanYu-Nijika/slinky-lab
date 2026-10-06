@@ -1,0 +1,230 @@
+export type Scenario = "drop" | "stairs";
+export type Profile = "preview" | "fine";
+export type RunStatus =
+  | "queued"
+  | "preparing"
+  | "running"
+  | "paused"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "interrupted";
+
+export interface Material {
+  turns: number;
+  radius: number;
+  strip_width: number;
+  strip_thickness: number;
+  pitch: number;
+  mass: number;
+  young_modulus: number;
+  shear_modulus: number;
+  damping: number;
+  friction: number;
+}
+
+export interface Scene {
+  gravity: number;
+  step_height: number;
+  step_depth: number;
+  step_width: number;
+  step_count: number;
+  tilt_deg: number;
+  initial_angular_velocity: number;
+  initial_forward_velocity: number;
+  launch_offset: number;
+  settle_time: number;
+}
+
+export interface Numerics {
+  profile: Profile;
+  duration: number;
+  sample_hz: number;
+  segments_per_turn: number | null;
+  timestep: number | null;
+  max_wall_seconds: number;
+}
+
+export interface RunConfig {
+  schema_version: 1;
+  name: string;
+  scenario: Scenario;
+  material: Material;
+  scene: Scene;
+  numerics: Numerics;
+  provenance: Record<string, string>;
+}
+
+export interface Frame {
+  time: number;
+  positions: number[][];
+  quaternions: number[][];
+  contacts: number[][];
+  metrics: Record<string, number>;
+}
+
+export interface GeomMetadata {
+  name?: string;
+  type?: "box" | "plane" | "sphere" | string;
+  half_size?: number[];
+  half_sizes?: number[];
+  center?: number[];
+  position?: number[];
+  quaternion?: number[];
+  static?: boolean;
+  material_index?: number;
+  color?: string;
+}
+
+export interface RenderMetadata {
+  half_sizes?: number[][];
+  types?: string[];
+  names?: string[];
+  static?: boolean[];
+  positions?: number[][];
+  quaternions?: number[][];
+  material_indices?: number[];
+  colors?: string[];
+  geoms?: GeomMetadata[];
+  static_geoms?: GeomMetadata[];
+  render?: RenderMetadata;
+  engine_version?: string;
+  mujoco_version?: string;
+  model_version?: string;
+  [key: string]: unknown;
+}
+
+export interface RunSummary {
+  frames?: number;
+  duration?: number;
+  top_z?: number;
+  bottom_z?: number;
+  com_z?: number;
+  steps_descended?: number;
+  max_penetration?: number;
+  kinetic_energy?: number;
+  gravitational_energy?: number;
+  cable_work?: number;
+  damping_work?: number;
+  contact_work?: number;
+  numerical_validation?: "passed" | "failed" | "pending" | string;
+  experimental_validation?: "supported" | "unsupported" | "pending" | string;
+  reference_rmse?: number;
+  [key: string]: unknown;
+}
+
+export interface RunResult {
+  run_id: string;
+  status: RunStatus | string;
+  config: RunConfig;
+  summary: RunSummary;
+  artifacts: string[];
+  error?: string | null;
+  progress?: number;
+  metadata?: RenderMetadata;
+  frames?: Frame[];
+}
+
+export interface PresetInfo {
+  id?: string;
+  name?: string;
+  label?: string;
+  config?: RunConfig;
+  description?: string;
+}
+
+export interface SweepAxis {
+  parameter: string;
+  values: number[];
+}
+
+export interface SweepConfig {
+  name: string;
+  base: RunConfig;
+  axes: SweepAxis[];
+}
+
+export interface SweepRun {
+  parameters: Record<string, number>;
+  run_id?: string;
+  status: RunStatus | string;
+  summary?: RunSummary;
+}
+
+export interface SweepResult {
+  sweep_id: string;
+  status: RunStatus | string;
+  runs: SweepRun[];
+  summary?: RunSummary & { results?: SweepRun[] };
+  progress?: number;
+  error?: string | null;
+}
+
+export const DEFAULT_MATERIAL: Material = {
+  turns: 12,
+  radius: 0.03,
+  strip_width: 0.003,
+  strip_thickness: 0.0015,
+  pitch: 0.0017,
+  mass: 0.0487,
+  young_modulus: 1e8,
+  shear_modulus: 3.7e7,
+  damping: 0.00001,
+  friction: 0.5,
+};
+
+export const DEFAULT_SCENE: Scene = {
+  gravity: 9.81,
+  step_height: 0.04,
+  step_depth: 0.08,
+  step_width: 0.3,
+  step_count: 6,
+  tilt_deg: 25,
+  initial_angular_velocity: 0,
+  initial_forward_velocity: 0,
+  launch_offset: 0,
+  settle_time: 2,
+};
+
+export const DEFAULT_NUMERICS: Numerics = {
+  profile: "preview",
+  duration: 1.5,
+  sample_hz: 60,
+  segments_per_turn: null,
+  timestep: null,
+  max_wall_seconds: 600,
+};
+
+export const DEFAULT_CONFIG: RunConfig = {
+  schema_version: 1,
+  name: "彩虹圈实验",
+  scenario: "drop",
+  material: { ...DEFAULT_MATERIAL },
+  scene: { ...DEFAULT_SCENE },
+  numerics: { ...DEFAULT_NUMERICS },
+  provenance: { preset: "illustrative: not experimentally calibrated" },
+};
+
+export const METRIC_KEYS = [
+  "top_z",
+  "bottom_z",
+  "com_z",
+  "kinetic_energy",
+  "gravitational_energy",
+  "cable_work",
+  "damping_work",
+  "contact_work",
+] as const;
+
+export type MetricKey = (typeof METRIC_KEYS)[number];
+
+export const METRIC_LABELS: Record<MetricKey, string> = {
+  top_z: "顶部高度",
+  bottom_z: "底部高度",
+  com_z: "质心高度",
+  kinetic_energy: "动能",
+  gravitational_energy: "重力势能",
+  cable_work: "弹性做功",
+  damping_work: "阻尼做功",
+  contact_work: "接触做功",
+};

@@ -1,0 +1,129 @@
+name: Verify and publish
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: slinky-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: pip install --require-hashes -r requirements.lock
+      - run: pip install -e '.[test]'
+      - run: pytest -q --junitxml=reports/pytest.xml
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+      - run: python scripts/validate.py --output reports/validation.json --quick
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: validation-reports
+          path: |
+            reports/
+            frontend/playwright-report/
+            frontend/test-results/
+
+  container:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: slinky-lab:ci
+          build-args: SOURCE_REVISION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Container smoke test and persistence
+        run: |
+          docker run -d --init --name slinky-test -p 127.0.0.1:8000:8000 -v slinky-ci-data:/data slinky-lab:ci
+          python3 scripts/container_smoke.py --url http://127.0.0.1:8000 --output reports/container.json
+          docker restart slinky-test
+          python3 scripts/container_smoke.py --url http://127.0.0.1:8000 --check-persisted reports/container.json
+      - name: Container logs
+        if: always()
+        run: docker logs slinky-test
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish verified image
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          IMAGE=ghcr.io/fanyu-nijika/slinky-lab
+          VERSION="${GITHUB_REF_NAME}"
+          docker tag slinky-lab:ci "$IMAGE:$VERSION"
+          docker tag slinky-lab:ci "$IMAGE:sha-${GITHUB_SHA}"
+          docker push "$IMAGE:$VERSION"
+          docker push "$IMAGE:sha-${GITHUB_SHA}"
+          docker image inspect "$IMAGE:$VERSION" --format '{{json .RepoDigests}}' > reports/image-digest.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: container-report
+          path: reports/
+
+  public-pull:
+    needs: container
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Anonymous pull on a fresh runner
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/anonymous-docker
+        run: |
+          mkdir -p "$DOCKER_CONFIG"
+          printf '{}' > "$DOCKER_CONFIG/config.json"
+          IMAGE="ghcr.io/fanyu-nijika/slinky-lab:${GITHUB_REF_NAME}"
+          docker pull "$IMAGE"
+          docker run -d --init --name slinky-public -p 127.0.0.1:8000:8000 -v slinky-public-data:/data "$IMAGE"
+          python3 scripts/container_smoke.py --url http://127.0.0.1:8000 --output reports/anonymous-pull.json
+          docker image inspect "$IMAGE" --format '{{json .RepoDigests}}' > reports/public-image-digest.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: anonymous-pull-report
+          path: reports/

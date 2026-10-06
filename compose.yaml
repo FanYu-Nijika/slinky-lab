@@ -1,0 +1,12 @@
+services:
+  slinky-lab:
+    image: ghcr.io/fanyu-nijika/slinky-lab:v0.1.0
+    init: true
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - slinky-data:/data
+    restart: unless-stopped
+
+volumes:
+  slinky-data:
