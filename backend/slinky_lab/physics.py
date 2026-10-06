@@ -19,7 +19,12 @@ try:
 except ImportError:  # pragma: no cover - the package is a project dependency
     mujoco = None  # type: ignore[assignment]
 
-from .schemas import Frame, RunConfig
+from . import MODEL_VERSION
+from .energy import cable_elastic_energy
+from .equilibrium import solve_static_equilibrium
+from .gait import GaitRecorder
+from .initial_conditions import hanging_guess
+from .schemas import Contact, Frame, RunConfig
 
 
 ProgressCallback = Callable[[float], None]
@@ -97,6 +102,26 @@ def _matrix_to_quat(matrix: np.ndarray) -> np.ndarray:
     return quaternion / norm
 
 
+def _rotation_vector(matrix: np.ndarray) -> np.ndarray:
+    cosine = float(np.clip((np.trace(matrix) - 1.0) * 0.5, -1.0, 1.0))
+    angle = math.acos(cosine)
+    if angle < 1e-8:
+        return np.array([
+            0.5 * (matrix[2, 1] - matrix[1, 2]),
+            0.5 * (matrix[0, 2] - matrix[2, 0]),
+            0.5 * (matrix[1, 0] - matrix[0, 1]),
+        ], dtype=float)
+    sine = math.sin(angle)
+    if abs(sine) < 1e-8:
+        return np.zeros(3, dtype=float)
+    axis = np.array([
+        matrix[2, 1] - matrix[1, 2],
+        matrix[0, 2] - matrix[2, 0],
+        matrix[1, 0] - matrix[0, 1],
+    ], dtype=float) / (2.0 * sine)
+    return axis * angle
+
+
 class Simulation:
     """One prepared MuJoCo experiment with a fixed SI-unit configuration."""
 
@@ -115,11 +140,13 @@ class Simulation:
         self._angle = math.radians(config.scene.tilt_deg) if config.scenario == "stairs" else 0.0
         self._offset = self._initial_offset()
         self._anchor = self._cable_endpoint()
+        self._rest_vertices, self._rest_frames, self._rest_lengths = self._radial_geometry()
         self.model_xml = self._build_model_xml()
         self.model = mujoco.MjModel.from_xml_string(self.model_xml)
         self.model.opt.timestep = self.dt
         self.data = mujoco.MjData(self.model)
         self._body_ids, self._geom_ids = self._discover_cable_elements()
+        self._endpoint_ids = [self.model.site("S_first").id, self.model.site("S_last").id]
         self._cable_geom_to_material = {geom_id: index for index, geom_id in enumerate(self._geom_ids)}
         self._stair_geom_ids = {
             geom_id for geom_id in range(int(self.model.ngeom))
@@ -148,10 +175,16 @@ class Simulation:
         self._max_step = 0
         self._last_stair_contact_labels: dict[int, set[str]] = {}
         self._step_events: list[dict[str, Any]] = []
+        self._gait = GaitRecorder(max(config.material.mass * config.scene.gravity, 1e-8))
         self._settle_speed = 0.0
         self._settle_damping = 0.0
         self._settle_steps = 0
         self._settle_residual_acceleration = float("nan")
+        self._settle_force_residual = float("nan")
+        self._settle_anchor_error = float("nan")
+        self._initial_guess_used = False
+        self._static_solve: dict[str, Any] = {"status": "not_run"}
+        self._quiet_duration = 0.0
         self._settle_status = "not_run"
         self._release_com_z: float | None = None
         self._release_com_vz: float | None = None
@@ -202,6 +235,39 @@ class Simulation:
         endpoint = rotation @ np.array([self.config.material.radius, 0.0, self._height], dtype=float)
         return tuple(np.asarray(self._offset, dtype=float) + endpoint)
 
+    def _radial_geometry(self) -> tuple[np.ndarray, list[np.ndarray], np.ndarray]:
+        material = self.config.material
+        theta = np.linspace(0.0, 2.0 * math.pi * material.turns, self._segments + 1)
+        local_vertices = np.column_stack((
+            material.radius * np.cos(theta),
+            material.radius * np.sin(theta),
+            self._height * np.linspace(0.0, 1.0, self._segments + 1),
+        ))
+        # Put the held end at the root of the drop tree. A distal-end hold
+        # otherwise creates a dense constraint Jacobian across every hinge.
+        if self.config.scenario == "drop":
+            local_vertices = local_vertices[::-1].copy()
+            theta = theta[::-1].copy()
+        rotation = _rotation_y(self._angle)
+        vertices = local_vertices @ rotation.T + np.asarray(self._offset, dtype=float)
+        frames: list[np.ndarray] = []
+        lengths = np.empty(self._segments, dtype=float)
+        for index in range(self._segments):
+            tangent = vertices[index + 1] - vertices[index]
+            length = float(np.linalg.norm(tangent))
+            if length <= 0.0:
+                raise ValueError("cable discretization produced a zero-length element")
+            tangent /= length
+            phase = 0.5 * (theta[index] + theta[index + 1])
+            width = rotation @ np.array([-math.cos(phase), -math.sin(phase), 0.0], dtype=float)
+            width -= tangent * float(np.dot(width, tangent))
+            width /= np.linalg.norm(width)
+            normal = np.cross(tangent, width)
+            normal /= np.linalg.norm(normal)
+            frames.append(np.column_stack((tangent, width, normal)))
+            lengths[index] = length
+        return vertices, frames, lengths
+
     def _build_composite_model_xml(self) -> str:
         material = self.config.material
         scene = self.config.scene
@@ -248,7 +314,7 @@ class Simulation:
       <default>
         <joint damping=\"{_xml_float(material.damping)}\" armature=\"0\"/>
         <geom contype=\"1\" conaffinity=\"1\" friction=\"{friction}\"
-              solref=\"0.003 1\" solimp=\"0.95 0.99 0.001 0.5 2\"/>
+              solref=\"{_xml_float(self.config.numerics.contact_time_constant)} 1\" solimp=\"0.95 0.99 0.001 0.5 2\"/>
       </default>
       <extension><plugin plugin=\"mujoco.elasticity.cable\"/></extension>
       <worldbody>
@@ -285,41 +351,34 @@ class Simulation:
         if world is None or composite is None or extension_plugin is None:
             raise RuntimeError("failed to locate cable model template")
         world.remove(composite)
+        # Terrain friction is independent of coil/coil friction. MuJoCo uses
+        # the higher-priority geom's contact parameters at a terrain contact.
+        for terrain in world.findall("geom"):
+            terrain.set("priority", "1")
         instance = ET.SubElement(extension_plugin, "instance", {"name": "rod_material"})
         source_plugin = composite.find("plugin")
         if source_plugin is None:
             raise RuntimeError("cable plugin configuration is missing")
         for config in source_plugin.findall("config"):
             instance.append(ET.fromstring(ET.tostring(config, encoding="unicode")))
+        if self.config.scenario == "drop":
+            anchor_body = world.find("body[@name='drop_anchor']")
+            ET.SubElement(anchor_body, "site", {"name": "hold_site", "size": ".001"})
+            hold = root.find("equality/connect")
+            hold.attrib.clear()
+            hold.attrib.update({"name": "drop_hold", "site1": "S_first", "site2": "hold_site", "solref": "0.001 1",
+                                "solimp": "0.99 0.9999 0.0001"})
 
         material = self.config.material
-        theta = np.linspace(0.0, 2.0 * math.pi * material.turns, self._segments + 1)
-        local_vertices = np.column_stack((
-            material.radius * np.cos(theta),
-            material.radius * np.sin(theta),
-            self._height * np.linspace(0.0, 1.0, self._segments + 1),
-        ))
-        rotation = _rotation_y(self._angle)
-        vertices = local_vertices @ rotation.T + np.asarray(self._offset, dtype=float)
+        vertices = self._rest_vertices
         parent = world
         previous_frame: np.ndarray | None = None
         previous_name: str | None = None
         contact = ET.SubElement(root, "contact")
 
         for index in range(self._segments):
-            tangent = vertices[index + 1] - vertices[index]
-            length = float(np.linalg.norm(tangent))
-            if length <= 0.0:
-                raise ValueError("cable discretization produced a zero-length element")
-            tangent /= length
-            phase = 0.5 * (theta[index] + theta[index + 1])
-            width = rotation @ np.array([-math.cos(phase), -math.sin(phase), 0.0], dtype=float)
-            width -= tangent * float(np.dot(width, tangent))
-            width /= np.linalg.norm(width)
-            normal = np.cross(tangent, width)
-            normal /= np.linalg.norm(normal)
-            width = np.cross(normal, tangent)
-            frame = np.column_stack((tangent, width, normal))
+            length = float(self._rest_lengths[index])
+            frame = self._rest_frames[index]
             body_name = "B_first" if index == 0 else ("B_last" if index == self._segments - 1 else f"B_{index}")
             if previous_frame is None:
                 body_pos = vertices[index]
@@ -347,6 +406,7 @@ class Simulation:
                 "pos": _vec3((length * 0.5, 0.0, 0.0)),
                 "size": _vec3((length * 0.5, material.strip_width * 0.5, material.strip_thickness * 0.5)),
                 "mass": _xml_float(material.mass / self._segments),
+                "friction": _vec3((material.self_friction, material.self_friction * 0.8, material.self_friction * 0.02)),
             })
             ET.SubElement(body, "plugin", {"instance": "rod_material"})
             if index == 0:
@@ -418,6 +478,7 @@ class Simulation:
             dof_count = self._joint_dof_count(joint_id)
             if dof_count >= 6:
                 self.data.qvel[dof_start] = self.config.scene.initial_forward_velocity
+                self.data.qvel[dof_start + 1] = self.config.scene.initial_lateral_velocity
                 self.data.qvel[dof_start + 4] = self.config.scene.initial_angular_velocity
         mujoco.mj_forward(self.model, self.data)
 
@@ -456,43 +517,59 @@ class Simulation:
             settle_steps = max(1, int(math.ceil(self.config.scene.settle_time / self.dt)))
             self._status = "settling"
             self.data.eq_active[0] = 1
-            physical_damping = np.asarray(self.model.dof_damping, dtype=float).copy()
-            self._settle_damping = 5.0
-            settle_damping = np.maximum(physical_damping, self._settle_damping)
-            self.model.dof_damping[:] = settle_damping
-            cancelled = False
-            unstable = False
-            stable_steps = 0
-            stable_required = min(100, max(10, settle_steps // 20))
-            for index in range(settle_steps):
-                if self._is_cancelled(should_cancel):
-                    cancelled = True
-                    break
-                mujoco.mj_step(self.model, self.data)
-                if not np.all(np.isfinite(np.asarray(self.data.qvel, dtype=float))):
-                    unstable = True
-                    break
-                settle_speed = float(np.linalg.norm(np.asarray(self.data.qvel, dtype=float)))
-                stable_steps = stable_steps + 1 if settle_speed <= 0.05 else 0
-                self._settle_steps = index + 1
-                if index % max(1, settle_steps // 100) == 0:
-                    self._report_progress(progress, "settle", (index + 1) / settle_steps)
-                if stable_steps >= stable_required:
-                    break
-            self.model.dof_damping[:] = physical_damping
-            if cancelled:
+            self._apply_hanging_guess()
+            self._report_progress(progress, "static_solve", 0.0)
+            self._static_solve = solve_static_equilibrium(
+                self.model, self.data, self._anchor, endpoint_site_id=self._endpoint_ids[0],
+                should_cancel=should_cancel, max_calls=max(10000, self._segments * 150),
+                time_limit_s=min(60.0, self.config.numerics.max_wall_seconds * 0.5),
+                length_scale=self.config.material.radius,
+            )
+            if self._static_solve["status"] == "cancelled" or self._is_cancelled(should_cancel):
                 self._status = "cancelled"
                 return
-            if unstable:
-                self._status = "not_converged"
-                raise RuntimeError("drop settling became numerically unstable")
+            self._check_equilibrium()
+            physical_damping = self.model.dof_damping.copy()
+            material = self.config.material
+            inertia = float(np.max(self.model.body_inertia[self._body_ids]))
+            moment = max(material.strip_width * material.strip_thickness**3,
+                         material.strip_thickness * material.strip_width**3) / 12
+            rotational_stiffness = material.young_modulus * moment / float(np.min(self._rest_lengths))
+            # Relaxation damping follows sqrt(inertia * stiffness), so it does
+            # not freeze microscopic hinges with a macroscopic damping value.
+            self._settle_damping = 6 * math.sqrt(inertia * rotational_stiffness)
+            self.model.dof_damping[6:] = np.maximum(physical_damping[6:], self._settle_damping)
+            self.model.dof_damping[:3] = material.mass * 10
+            self.model.dof_damping[3:6] = material.mass * material.radius**2 * 10
+            self._settle_status = "not_converged"
+            try:
+                check_interval = max(1, int(0.05 / self.dt))
+                for index in range(0 if self._equilibrium_converged() else settle_steps):
+                    if self._is_cancelled(should_cancel):
+                        self._status = "cancelled"
+                        return
+                    previous_time = self.time
+                    mujoco.mj_step(self.model, self.data)
+                    self._check_dynamics(previous_time)
+                    self._settle_steps = index + 1
+                    if (index + 1) % check_interval == 0 or index + 1 == settle_steps:
+                        self._check_equilibrium()
+                        self._report_progress(progress, "settle", (index + 1) / settle_steps)
+                        if self.time >= 0.2 and self._equilibrium_converged():
+                            self._settle_status = "converged"
+                            break
+            finally:
+                self.model.dof_damping[:] = physical_damping
+            self._check_equilibrium()
+            if self._equilibrium_converged():
+                self._settle_status = "converged"
+                self.data.qvel[:] = 0
+            # Residuals above were measured with the hold still active. The
+            # post-release acceleration must include gravity and is not a
+            # static equilibrium residual.
             self.data.eq_active[0] = 0
             self.data.time = 0.0
             mujoco.mj_forward(self.model, self.data)
-            qacc = np.asarray(self.data.qacc, dtype=float)
-            self._settle_residual_acceleration = float(np.max(np.abs(qacc))) if qacc.size else 0.0
-            self._settle_speed = float(np.linalg.norm(np.asarray(self.data.qvel, dtype=float)))
-            self._settle_status = "converged" if self._settle_speed <= 0.05 and self._settle_residual_acceleration <= 1.0 else "not_converged"
             self._release_com_z = self._com_position()[2]
             self._release_com_vz = self._com_velocity()[2]
             self._released = True
@@ -504,6 +581,46 @@ class Simulation:
             self._report_progress(progress, "prepare", 1.0)
         self._prepared = True
         self._status = "ready"
+
+    def _apply_hanging_guess(self) -> None:
+        guess = hanging_guess(self.config, self._rest_lengths, self._anchor)
+        if guess is None:
+            return
+        vertices, frames = guess
+        vertices = vertices[::-1].copy()
+        frames = frames[::-1].copy() @ np.diag([-1.0, 1.0, -1.0])
+        self.data.qpos[:3] = vertices[0]
+        self.data.qpos[3:7] = _matrix_to_quat(frames[0])
+        for index, body_id in enumerate(self._body_ids[1:], 1):
+            joint_id = int(self.model.body_jntadr[body_id])
+            qadr = int(self.model.jnt_qposadr[joint_id])
+            rest_relative = self._rest_frames[index - 1].T @ self._rest_frames[index]
+            desired_relative = frames[index - 1].T @ frames[index]
+            self.data.qpos[qadr:qadr + 4] = _matrix_to_quat(rest_relative.T @ desired_relative)
+        self.data.qvel[:] = 0
+        mujoco.mj_forward(self.model, self.data)
+        self._initial_guess_used = True
+
+    def _check_equilibrium(self) -> None:
+        mujoco.mj_forward(self.model, self.data)
+        mujoco.mj_energyVel(self.model, self.data)
+        self._settle_speed = math.sqrt(max(0.0, 2 * float(self.data.energy[1]) / self._model_mass))
+        velocity = self.data.qvel.copy()
+        self.data.qvel[:] = 0
+        mujoco.mj_forward(self.model, self.data)
+        self._settle_residual_acceleration = float(np.max(np.abs(self.data.qacc)))
+        residual = np.zeros(self.model.nv)
+        mujoco.mj_mulM(self.model, self.data, residual, self.data.qacc)
+        force_scale = max(self._model_mass * self.config.scene.gravity, 1e-8)
+        torque_scale = force_scale * self.config.material.radius
+        self._settle_force_residual = max(float(np.max(np.abs(residual[:3]))) / force_scale,
+                                          float(np.max(np.abs(residual[3:]))) / torque_scale)
+        self._settle_anchor_error = float(np.linalg.norm(self.data.site_xpos[self._endpoint_ids[0]] - self._anchor))
+        self.data.qvel[:] = velocity
+        mujoco.mj_forward(self.model, self.data)
+
+    def _equilibrium_converged(self) -> bool:
+        return self._settle_speed <= 0.002 and self._settle_force_residual <= 0.01 and self._settle_anchor_error <= 0.0002
 
     def _joint_damping_power(self) -> float:
         qvel = np.asarray(self.data.qvel, dtype=float)
@@ -525,6 +642,8 @@ class Simulation:
     def _update_contact_diagnostics(self) -> None:
         nonadjacent = 0
         stair_contacts = 0
+        support_forces: dict[int, dict[str, float]] = {}
+        contact_force = np.zeros(6)
         self._last_stair_steps = set()
         self._last_stair_contact_labels = {}
         for index in range(int(self.data.ncon)):
@@ -542,7 +661,7 @@ class Simulation:
                 self._last_stair_steps.add(step_index)
                 cable_geom = geom_b if stair_geom == geom_a else geom_a
                 material_index = self._cable_geom_to_material.get(cable_geom, -1)
-                end_fraction = max(1, len(self._geom_ids) // 10)
+                end_fraction = int(self._resolved["segments_per_turn"])
                 if material_index < end_fraction:
                     label = "first"
                 elif material_index >= len(self._geom_ids) - end_fraction:
@@ -550,10 +669,25 @@ class Simulation:
                 else:
                     label = "middle"
                 self._last_stair_contact_labels.setdefault(step_index, set()).add(label)
+                if step_index > 0 and self._is_tread_contact(contact, step_index):
+                    mujoco.mj_contactForce(self.model, self.data, index, contact_force)
+                    forces = support_forces.setdefault(step_index, {"first": 0.0, "last": 0.0, "middle": 0.0})
+                    forces[label] += max(0.0, float(contact_force[0]))
         self._nonadjacent_self_contacts += nonadjacent
         self._stair_contact_events += stair_contacts
         self._max_nonadjacent_self_contacts = max(self._max_nonadjacent_self_contacts, nonadjacent)
         self._max_stair_contacts = max(self._max_stair_contacts, stair_contacts)
+        if self.config.scenario == "stairs":
+            self._gait.update(self.time, self.dt, support_forces)
+
+    def _is_tread_contact(self, contact: Any, step: int) -> bool:
+        scene = self.config.scene
+        top = scene.step_height * (scene.step_count - step)
+        point = np.asarray(contact.pos)
+        tolerance = max(0.0005, self.config.material.strip_thickness * 2)
+        return (abs(float(contact.frame[2])) >= 0.8 and abs(float(point[2]) - top) <= tolerance
+                and scene.step_depth * step - tolerance <= point[0] <= scene.step_depth * (step + 1) + tolerance
+                and abs(float(point[1])) <= scene.step_width * 0.5 + tolerance)
 
     def _com_position(self) -> np.ndarray:
         masses = np.asarray(self.model.body_mass[self._body_ids], dtype=float)
@@ -580,11 +714,11 @@ class Simulation:
         return False
 
     def _material_vertical_span(self) -> float:
-        positions = np.asarray(self.data.geom_xpos[self._geom_ids], dtype=float)
+        positions = np.asarray(self.data.site_xpos[self._endpoint_ids], dtype=float)
         return float(abs(positions[-1, 2] - positions[0, 2]))
 
     def _prepare_research_metrics(self) -> None:
-        positions = np.asarray(self.data.geom_xpos[self._geom_ids], dtype=float)
+        positions = np.asarray(self.data.site_xpos[self._endpoint_ids], dtype=float)
         endpoints = positions[[0, -1], 2]
         self._top_endpoint_index = 0 if endpoints[0] >= endpoints[1] else -1
         self._bottom_endpoint_index = -1 if self._top_endpoint_index == 0 else 0
@@ -598,7 +732,7 @@ class Simulation:
     def _update_research_metrics(self) -> None:
         if self.config.scenario != "drop" or self._release_bottom_z is None:
             return
-        positions = np.asarray(self.data.geom_xpos[self._geom_ids], dtype=float)
+        positions = np.asarray(self.data.site_xpos[self._endpoint_ids], dtype=float)
         bottom_z = float(positions[self._bottom_endpoint_index, 2])
         if self._bottom_onset_time is None and self._bottom_onset_threshold is not None:
             if abs(bottom_z - self._release_bottom_z) >= self._bottom_onset_threshold:
@@ -639,9 +773,16 @@ class Simulation:
                     self._max_step = step_index
 
     def _movement_classification(self) -> str:
-        labels = [event["end"] for event in self._step_events if event["end"] in {"first", "last"}]
-        if len(labels) >= 2 and all(left != right for left, right in zip(labels, labels[1:])):
+        if self.config.scenario == "stairs":
+            if abs(self._com_position()[1]) > self.config.scene.step_width * 0.5 + self.config.material.radius:
+                return "side_fall"
+            if self._quiet_duration >= 0.1:
+                return "stopped"
+        support = self._gait.summary()
+        if support["confirmed_flip_count"] >= 2:
             return "flip"
+        if support["candidate_flip_count"] >= 2:
+            return "ambiguous_flip"
         if self._step_events or self._stair_contact_events:
             return "sliding"
         return "no_step_contact"
@@ -654,7 +795,11 @@ class Simulation:
         if self._status == "cancelled" or self.time >= self.duration:
             self._status = "complete" if self.time >= self.duration else self._status
             return
+        previous_time = self.time
         mujoco.mj_step(self.model, self.data)
+        self._check_dynamics(previous_time)
+        if self.duration - 1e-12 <= self.time < self.duration:
+            self.data.time = self.duration
         if not np.all(np.isfinite(np.asarray(self.data.qpos, dtype=float))) or not np.all(np.isfinite(np.asarray(self.data.qvel, dtype=float))):
             self._status = "unstable"
             raise RuntimeError("MuJoCo state became non-finite")
@@ -670,10 +815,20 @@ class Simulation:
         self._update_freefall()
         self._update_research_metrics()
         self._update_steps()
+        if self.config.scenario == "stairs":
+            mujoco.mj_energyVel(self.model, self.data)
+            speed = math.sqrt(max(0.0, 2 * float(self.data.energy[1]) / self._model_mass))
+            self._quiet_duration = self._quiet_duration + self.dt if speed < 0.005 else 0.0
         if self.time >= self.duration:
             self._status = "complete"
         else:
             self._status = "running"
+
+    def _check_dynamics(self, previous_time: float) -> None:
+        warnings = [mujoco.mjtWarning(index).name for index, item in enumerate(self.data.warning) if item.number]
+        if warnings or self.time <= previous_time:
+            self._status = "unstable"
+            raise RuntimeError(f"MuJoCo rejected the integration step: {', '.join(warnings) or 'time reset'}")
 
     def _render_quaternions(self) -> np.ndarray:
         matrices = np.asarray(self.data.geom_xmat[self._geom_ids], dtype=float).reshape(-1, 3, 3)
@@ -684,6 +839,10 @@ class Simulation:
         self._previous_quaternions = quaternions.copy()
         return quaternions
 
+    def _elastic_energy_estimate(self) -> float:
+        material = self.config.material
+        return cable_elastic_energy(self.model, self.data, self._body_ids, material.young_modulus, material.shear_modulus)
+
     def _metrics(self) -> dict[str, float]:
         positions = np.asarray(self.data.geom_xpos[self._geom_ids], dtype=float)
         matrices = np.asarray(self.data.geom_xmat[self._geom_ids], dtype=float).reshape(-1, 3, 3)
@@ -692,12 +851,21 @@ class Simulation:
         com_velocity = self._com_velocity()
         spatial_top_z = float(np.max(positions[:, 2] + extents))
         spatial_bottom_z = float(np.min(positions[:, 2] - extents))
-        material_top_z = float(positions[self._top_endpoint_index, 2])
-        material_bottom_z = float(positions[self._bottom_endpoint_index, 2])
+        top_endpoint_index = self._top_endpoint_index
+        bottom_endpoint_index = self._bottom_endpoint_index
+        if self._static_equilibrium_length is None:
+            top_endpoint_index = 0 if positions[0, 2] >= positions[-1, 2] else -1
+            bottom_endpoint_index = -1 if top_endpoint_index == 0 else 0
+        material_top_z = float(positions[top_endpoint_index, 2])
+        material_bottom_z = float(positions[bottom_endpoint_index, 2])
+        endpoints = np.asarray(self.data.site_xpos[self._endpoint_ids], dtype=float)
+        material_top_z = float(endpoints[top_endpoint_index, 2])
+        material_bottom_z = float(endpoints[bottom_endpoint_index, 2])
         top_z = material_top_z
         bottom_z = material_bottom_z
         mujoco.mj_energyPos(self.model, self.data)
         mujoco.mj_energyVel(self.model, self.data)
+        elastic_energy = self._elastic_energy_estimate()
         return {
             "top_z": top_z,
             "bottom_z": bottom_z,
@@ -705,8 +873,8 @@ class Simulation:
             "spatial_bottom_z": spatial_bottom_z,
             "material_top_z": material_top_z,
             "material_bottom_z": material_bottom_z,
-            "material_first_z": float(positions[0, 2]),
-            "material_last_z": float(positions[-1, 2]),
+            "material_first_z": float(endpoints[0, 2]),
+            "material_last_z": float(endpoints[-1, 2]),
             "material_vertical_span": self._material_vertical_span(),
             "com_x": float(com[0]),
             "com_y": float(com[1]),
@@ -716,6 +884,7 @@ class Simulation:
             "com_vz": float(com_velocity[2]),
             "kinetic_energy": float(self.data.energy[1]),
             "gravitational_energy": float(self.data.energy[0]),
+            "elastic_energy_estimate": elastic_energy,
             "cable_work": float(self._cable_work),
             "damping_work": float(self._damping_work),
             "contact_work": float(self._contact_work),
@@ -725,6 +894,7 @@ class Simulation:
             "stair_contact_events": float(self._stair_contact_events),
             "max_nonadjacent_self_contacts": float(self._max_nonadjacent_self_contacts),
             "max_stair_contacts": float(self._max_stair_contacts),
+            "confirmed_flip_count": float(self._gait.summary()["confirmed_flip_count"]),
         }
 
     def frame(self) -> dict[str, Any]:
@@ -734,14 +904,29 @@ class Simulation:
         positions = np.asarray(self.data.geom_xpos[self._geom_ids], dtype=float)
         quaternions = self._render_quaternions()
         contacts: list[list[float]] = []
+        contact_details: list[Contact] = []
+        force = np.zeros(6)
         for index in range(int(self.data.ncon)):
             contact = self.data.contact[index]
-            contacts.append([float(contact.pos[0]), float(contact.pos[1]), float(contact.pos[2])])
+            position = [float(value) for value in contact.pos]
+            contacts.append(position)
+            a, b = int(contact.geom[0]), int(contact.geom[1])
+            material_a = self._cable_geom_to_material.get(a)
+            material_b = self._cable_geom_to_material.get(b)
+            stair_geom = a if a in self._stair_geom_ids else (b if b in self._stair_geom_ids else None)
+            step = self._stair_geom_to_step.get(stair_geom)
+            material_index = material_a if material_a is not None else material_b
+            kind = "self" if material_a is not None and material_b is not None else ("stair" if step is not None else "external")
+            mujoco.mj_contactForce(self.model, self.data, index, force)
+            contact_details.append(Contact(position=position, geom_a=a, geom_b=b, normal_force=max(0.0, float(force[0])),
+                                           kind=kind, stair_step=step, material_index=material_index,
+                                           surface="tread" if step is not None and self._is_tread_contact(contact, step) else "other"))
         frame = Frame(
             time=self.time,
             positions=positions.tolist(),
             quaternions=quaternions.tolist(),
             contacts=contacts,
+            contact_details=contact_details,
             metrics=self._metrics(),
         )
         return frame.model_dump(mode="json")
@@ -770,10 +955,14 @@ class Simulation:
             "settle_speed": self._settle_speed,
             "settle_damping": self._settle_damping,
             "settle_steps": self._settle_steps,
+            "initial_guess_used": self._initial_guess_used,
+            "static_solve": self._static_solve,
             "settle_simulated_seconds": self._settle_steps * self.dt,
             "settle_residual_acceleration": None if not math.isfinite(self._settle_residual_acceleration) else self._settle_residual_acceleration,
-            "settle_residual_threshold": 1.0,
-            "settle_damping_note": "temporary uniform relaxation damping; restored to configured physical damping before release and accepted only when residual acceleration is below the reported threshold",
+            "settle_force_residual": None if not math.isfinite(self._settle_force_residual) else self._settle_force_residual,
+            "settle_anchor_error_m": None if not math.isfinite(self._settle_anchor_error) else self._settle_anchor_error,
+            "settle_thresholds": {"equivalent_speed_m_s": 0.002, "relative_force_residual": 0.01, "anchor_error_m": 0.0002},
+            "settle_damping_note": "temporary inertia-scaled relaxation damping; physical damping restored before release, residual measured while held",
             "freefall_check": {
                 "samples": self._freefall_samples,
                 "max_height_error": None if not math.isfinite(self._freefall_error) else self._freefall_error,
@@ -784,6 +973,9 @@ class Simulation:
             "energy_diagnostics": {
                 "approximate": True,
                 "d_energy_includes_cable_elastic": False,
+                "elastic_energy_estimate": metrics["elastic_energy_estimate"],
+                "elastic_energy_definition": "plugin rotation-vector difference and rectangular Saint-Venant J, Iy, Iz; diagnostic only",
+                "elastic_energy_gradient_check": "small joint rotation differs from plugin torque by about 11%; do not treat as an exact potential",
                 "cable_work_definition": "signed integral of qfrc_passive dot qvel after removing known joint damping",
                 "damping_work_definition": "signed integral of -sum(dof_damping * qvel^2)",
                 "contact_work_definition": "constraint generalized power; includes solver work and is diagnostic",
@@ -800,8 +992,10 @@ class Simulation:
             "collapse_time": self._collapse_time,
             "step_events": self._step_events,
             "movement_classification": self._movement_classification(),
+            "support_diagnostics": self._gait.summary(),
+            "quiet_duration_s": self._quiet_duration,
             "research_metric_definitions": {
-                "static_equilibrium_length": "vertical distance between material-order end geoms immediately before release or after stairs placement",
+                "static_equilibrium_length": "vertical distance between material endpoints immediately before release or after stairs placement",
                 "bottom_onset_time": "first post-release time when the material lower endpoint moves beyond max(0.5 mm, 0.5% initial vertical span)",
                 "collapse_time": "first post-release time with endpoint vertical span <= 1.05 * turns * strip_thickness, only when initial span exceeds this threshold",
                 "step_events": "new lower stair indices reached by cable/stair contact, with endpoint class from material-order end regions",
@@ -828,7 +1022,7 @@ class Simulation:
                 })
         return {
             "schema_version": self.config.schema_version,
-            "model_version": "helical-box-cable-v1",
+            "model_version": MODEL_VERSION,
             "engine_version": "3.15.0",
             "mujoco_version": getattr(mujoco, "__version__", "3.15.0"),
             "units": {"length": "m", "mass": "kg", "time": "s", "force": "N", "energy": "J", "stiffness": "Pa"},
@@ -839,6 +1033,11 @@ class Simulation:
             "body_ids": [int(value) for value in self._body_ids],
             "half_sizes": self._half_sizes.tolist(),
             "section_axes": {"x": "centerline tangent", "y": "strip width", "z": "strip thickness"},
+            "friction": {"self": self.config.material.self_friction, "environment": self.config.material.friction,
+                         "combination": "terrain priority 1 selects environment friction; cable/cable uses self friction"},
+            "contact_solver": {"time_constant_s": self.config.numerics.contact_time_constant,
+                               "damping_ratio": 1.0, "solimp": [0.95, 0.99, 0.001, 0.5, 2.0],
+                               "note": "MuJoCo regularization; effective time constant is clipped to at least twice the timestep"},
             "collision_policy": "explicit contact exclusions cover only direct adjacent cable bodies; non-adjacent cable geoms retain contype/conaffinity self-collision",
             "steps_descended_definition": "highest lower stair index reached by an observed cable/stair contact; COM crossing alone is not counted",
             "rest_shape": {"curve": "cos(s) sin(s) s", "turns": self.config.material.turns, "height": self._height,
@@ -849,6 +1048,7 @@ class Simulation:
             "energy_diagnostics": {
                 "d_energy_terms": ["gravitational_potential", "joint_spring_potential", "tendon_spring_potential", "flex_edge_potential", "kinetic"],
                 "cable_elastic_energy": "not provided by the first-party cable plugin; cable_work is an approximate power integral",
+                "elastic_energy_estimate": "available as an independent rectangular-section frame diagnostic; not included in d.energy",
                 "contact_energy": "not included in d.energy",
             },
         }

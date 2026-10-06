@@ -1,0 +1,100 @@
+{
+  "source": "reports\\drop-convergence\\16spt_dt1.25e-5.json",
+  "case": {
+    "id": "16spt_dt1.25e-5",
+    "segments_per_turn": 16,
+    "timestep": 1.25e-05
+  },
+  "config": {
+    "schema_version": 1,
+    "name": "drop-convergence-16spt_dt1.25e-5",
+    "scenario": "drop",
+    "material": {
+      "turns": 3,
+      "radius": 0.03,
+      "strip_width": 0.003,
+      "strip_thickness": 0.0015,
+      "pitch": 0.002,
+      "mass": 0.012,
+      "young_modulus": 100000000.0,
+      "shear_modulus": 37037037.03703704,
+      "damping": 1e-05,
+      "friction": 0.5
+    },
+    "scene": {
+      "gravity": 9.81,
+      "step_height": 0.04,
+      "step_depth": 0.08,
+      "step_width": 0.3,
+      "step_count": 6,
+      "tilt_deg": 25.0,
+      "initial_angular_velocity": 0.0,
+      "initial_forward_velocity": 0.0,
+      "launch_offset": 0.0,
+      "settle_time": 2.0
+    },
+    "numerics": {
+      "profile": "preview",
+      "duration": 0.45,
+      "sample_hz": 100,
+      "segments_per_turn": 16,
+      "timestep": 1.25e-05,
+      "max_wall_seconds": 180.0
+    },
+    "provenance": {
+      "purpose": "drop-convergence-acceptance",
+      "source": "local numerical validation"
+    }
+  },
+  "comparison_window_s": 0.18,
+  "events": {
+    "bottom_onset_time": 0.06198749999999521,
+    "collapse_time": 0.13778749999998688
+  },
+  "freefall_summary": {
+    "samples": 16000,
+    "max_height_error": 0.00020196212514505749,
+    "release_com_z": 0.21705387286070305,
+    "release_com_vz": 0.0,
+    "status": "observed"
+  },
+  "max_penetration_m": 0.0019263266330551466,
+  "warning_count": 0,
+  "preparation_residuals": {
+    "prepare_status": "converged",
+    "static_solve": {
+      "status": "converged",
+      "success": true,
+      "message": "The relative error between two consecutive iterates is at most 0.000000",
+      "calls": 3353,
+      "support_calls": 9,
+      "optimizer_success": true,
+      "support_success": true,
+      "initial_contacts": 0,
+      "contacts": 0,
+      "support_adjustment": [
+        -1.2246584902531478e-18,
+        2.883481474450061e-17,
+        -3.2862156033565267e-06
+      ],
+      "native_force_residual_max": 6.938893903907228e-18,
+      "native_global_residual_max": 0.11771999999999996,
+      "anchor_error_m": 3.2862156033597323e-06,
+      "qpos_finite": true,
+      "restored": false,
+      "wall_seconds": 0.25,
+      "initial_residual_norm": 4.126744098545016,
+      "initial_residual_max_normalized": 0.9807293622437185,
+      "full_mass_acceleration_residual_max": 0.0,
+      "normalized_native_torque_residual": 1.9648017623477258e-15,
+      "normalized_full_force_residual": 0.0,
+      "manual_forward_passive_max_error": 0.0,
+      "manual_forward_bias_max_error": 0.0,
+      "force_residual_tolerance": 0.001,
+      "anchor_tolerance_m": 0.0002
+    },
+    "settle_force_residual": 0.0,
+    "settle_residual_acceleration": 0.0,
+    "settle_anchor_error_m": 3.2862156033597323e-06
+  }
+}

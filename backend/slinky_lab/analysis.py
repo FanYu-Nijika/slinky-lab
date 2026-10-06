@@ -79,7 +79,7 @@ def summarize_frames(frames: Iterable[dict[str, Any]], config: RunConfig | dict[
     metric_names = (
         "top_z", "bottom_z", "spatial_top_z", "spatial_bottom_z", "material_top_z", "material_bottom_z",
         "material_first_z", "material_last_z", "material_vertical_span", "com_x", "com_y", "com_z",
-        "com_vx", "com_vy", "com_vz", "kinetic_energy", "gravitational_energy",
+        "com_vx", "com_vy", "com_vz", "kinetic_energy", "gravitational_energy", "elastic_energy_estimate",
         "cable_work", "damping_work", "contact_work", "steps_descended", "max_penetration",
         "nonadjacent_self_contacts", "stair_contact_events", "max_nonadjacent_self_contacts", "max_stair_contacts",
     )
@@ -111,6 +111,10 @@ def summarize_frames(frames: Iterable[dict[str, Any]], config: RunConfig | dict[
         initial_energy = metrics["kinetic_energy"]["initial"] + metrics["gravitational_energy"]["initial"]
         final_energy = metrics["kinetic_energy"]["final"] + metrics["gravitational_energy"]["final"]
         result["reported_energy_change"] = final_energy - initial_energy
+        if "elastic_energy_estimate" in metrics:
+            initial_with_elastic = initial_energy + metrics["elastic_energy_estimate"]["initial"]
+            final_with_elastic = final_energy + metrics["elastic_energy_estimate"]["final"]
+            result["reported_energy_change_with_elastic_estimate"] = final_with_elastic - initial_with_elastic
     return result
 
 
@@ -129,10 +133,14 @@ def summarize_sweep(
         value = summary.get(objective, metrics.get(objective))
         config = item.get("config", summary.get("config", {}))
         status = summary.get("status", item.get("status", "unknown"))
-        success = value is not None and np.isfinite(float(value)) and status not in {"failed", "error", "cancelled"}
+        try:
+            objective_value = float(value)
+        except (TypeError, ValueError):
+            objective_value = float("nan")
+        success = bool(np.isfinite(objective_value) and status not in {"failed", "error", "cancelled"})
         row = {
             "index": index,
-            "objective": float(value) if success else None,
+            "objective": objective_value if success else None,
             "scenario": summary.get("scenario", config.get("scenario") if isinstance(config, dict) else None),
             "config": config,
             "status": status,

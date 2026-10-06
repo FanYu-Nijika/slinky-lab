@@ -17,6 +17,10 @@ R. C. Cross and M. S. Wheatland, *Modeling a falling slinky*, American Journal o
 
 不能把文献没有报告的半径、截面尺寸、E/G、阻尼和台阶摩擦假称为该实物的实测参数。它们在平台中属于可修改的假设或另行标定参数。参考数据的拟合应报告使用了哪些目标，未参与拟合的数据才适合作独立检验。
 
+静态拟合先采用近密绕螺旋的扭转近似 `k=GJ/(2πR³N)`，再用原生力平衡计算修正模量尺度。半径、矩形截面和泊松比0.35均是明确假设；8段/圈拟合得到 E≈1.4221 GPa、G≈0.5267 GPa，悬挂长度1.13737m。该结果只通过所用静态目标的拟合检查，不是材料实测值，也不能证明加密后的下落时序正确。
+
+复现：`python scripts/calibrate_static.py --segments 8`。只查看量纲转换可运行 `slinky-lab calibrate --preset literature-39-turn --stiffness 0.22`，输出单位为Pa并注明仍需原生静态标定。
+
 ## 三维杆与接触
 
 - [MuJoCo 3.15.0](https://github.com/google-deepmind/mujoco/releases/tag/3.15.0)，固定引擎版本。

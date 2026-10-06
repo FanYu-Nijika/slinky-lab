@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .manager import RunManager
+from .calibration import moduli_from_coil_stiffness
 from .presets import get_preset
 from .schemas import RunConfig, SweepConfig
 
@@ -79,6 +80,13 @@ def _validate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _calibrate(args: argparse.Namespace) -> int:
+    config = _config_from_args(args.config, args.preset)
+    result = moduli_from_coil_stiffness(config.material, args.stiffness, args.poisson_ratio)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="slinky-lab", description="Slinky Lab dynamics workbench")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -102,6 +110,12 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--config")
     validate.add_argument("--preset")
     validate.set_defaults(handler=_validate)
+    calibrate = subparsers.add_parser("calibrate", help="estimate rod moduli from coil stiffness; requires subsequent native static fitting")
+    calibrate.add_argument("--config")
+    calibrate.add_argument("--preset")
+    calibrate.add_argument("--stiffness", type=float, required=True, help="measured bulk stiffness in N/m")
+    calibrate.add_argument("--poisson-ratio", type=float, default=0.35, help="assumed isotropic Poisson ratio")
+    calibrate.set_defaults(handler=_calibrate)
     return parser
 
 

@@ -20,6 +20,7 @@ class Material(StrictModel):
     shear_modulus: float = Field(3.7e7, ge=1.0e3, le=1.5e11)
     damping: float = Field(0.00001, ge=0, le=0.1)
     friction: float = Field(0.5, ge=0, le=3)
+    self_friction: float = Field(0.5, ge=0, le=3)
 
     @model_validator(mode="after")
     def valid_geometry(self):
@@ -39,6 +40,7 @@ class Scene(StrictModel):
     tilt_deg: float = Field(25, ge=-80, le=80)
     initial_angular_velocity: float = Field(0, ge=-20, le=20)
     initial_forward_velocity: float = Field(0, ge=-2, le=2)
+    initial_lateral_velocity: float = Field(0, ge=-2, le=2)
     launch_offset: float = Field(0, ge=-0.1, le=0.2)
     settle_time: float = Field(2, ge=0.05, le=15)
 
@@ -50,11 +52,12 @@ class Numerics(StrictModel):
     segments_per_turn: int | None = Field(None, ge=8, le=64)
     timestep: float | None = Field(None, ge=0.000001, le=0.002)
     max_wall_seconds: float = Field(600, ge=5, le=14400)
+    contact_time_constant: float = Field(0.003, ge=0.00005, le=0.03)
 
     def resolved(self):
         return {
             "segments_per_turn": self.segments_per_turn or (12 if self.profile == "preview" else 24),
-            "timestep": self.timestep or (0.0002 if self.profile == "preview" else 0.0001),
+            "timestep": self.timestep or (0.0002 if self.profile == "preview" else 0.00005),
             "iterations": 50 if self.profile == "preview" else 100,
             "tolerance": 1e-8 if self.profile == "preview" else 1e-10,
         }
@@ -76,11 +79,23 @@ class RunConfig(StrictModel):
         return self
 
 
+class Contact(StrictModel):
+    position: list[float] = Field(min_length=3, max_length=3)
+    geom_a: int = Field(ge=0)
+    geom_b: int = Field(ge=0)
+    normal_force: float = Field(ge=0)
+    kind: Literal["self", "stair", "external"]
+    stair_step: int | None = Field(None, ge=0)
+    material_index: int | None = Field(None, ge=0)
+    surface: Literal["tread", "other"] = "other"
+
+
 class Frame(StrictModel):
     time: float
     positions: list[list[float]]
     quaternions: list[list[float]]
     contacts: list[list[float]] = Field(default_factory=list)
+    contact_details: list[Contact] = Field(default_factory=list)
     metrics: dict[str, float] = Field(default_factory=dict)
 
     @model_validator(mode="after")

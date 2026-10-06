@@ -72,16 +72,21 @@ def main():
     args = parser.parse_args()
     config = RunConfig.model_validate({
         "name": "质心和时间步长检查", "scenario": "drop",
-        "material": {"turns": 3 if args.quick else 8, "mass": 0.012, "pitch": 0.002},
-        "scene": {"settle_time": 0.2 if args.quick else 1},
-        "numerics": {"duration": 0.12 if args.quick else 0.4, "segments_per_turn": 8 if args.quick else 12,
-                     "timestep": 0.0001, "max_wall_seconds": 180},
+        "material": {"turns": 3, "mass": 0.012, "pitch": 0.002, "young_modulus": 1e8, "shear_modulus": 1e8 / 2.7},
+        "scene": {"settle_time": 2},
+        "numerics": {"duration": 0.18, "segments_per_turn": 8 if args.quick else 16,
+                     "timestep": 0.000025 if args.quick else 0.0000125, "max_wall_seconds": 600},
     })
     report = {"application_version": __version__, "created_at": datetime.now(timezone.utc).isoformat(),
               "mode": "quick" if args.quick else "extended", "checks": {}}
     try:
         case, frames = run_case(config)
         report["baseline"] = case
+        report["checks"]["held_native_equilibrium"] = {
+            "passed": case["summary"]["prepare_status"] == "converged",
+            "relative_force_residual": case["summary"]["settle_force_residual"],
+            "anchor_error_m": case["summary"]["settle_anchor_error_m"],
+        }
         report["checks"]["center_of_mass_freefall"] = freefall_check(frames, config.scene.gravity)
         report["checks"]["work_balance"] = work_balance(frames)
         refined = config.model_copy(deep=True)
@@ -100,14 +105,20 @@ def main():
         if not args.quick:
             refined_mesh = config.model_copy(deep=True)
             refined_mesh.numerics.segments_per_turn *= 2
-            refined_mesh.numerics.timestep /= 2
+            refined_mesh.numerics.timestep /= 4
             mesh_case, mesh_frames = run_case(refined_mesh)
             report["double_mesh"] = mesh_case
             report["checks"]["double_mesh_events"] = compare_events(second["summary"], mesh_case["summary"])
             report["checks"]["double_mesh_freefall"] = freefall_check(mesh_frames, config.scene.gravity)
         report["checks"]["experimental_validation"] = {"status": "not_established_by_this_check"}
-        report["scope"] = "Software/solver diagnostic only; full preset acceptance is reported separately."
-        report["passed"] = report["checks"]["center_of_mass_freefall"]["passed"]
+        report["scope"] = "Held drop integration and event checks; staircase and experimental acceptance are reported separately."
+        required = [report["checks"]["center_of_mass_freefall"]["passed"],
+                    report["checks"]["held_native_equilibrium"]["passed"]]
+        required.extend(value["passed"] for value in report["checks"]["half_timestep_events"].values())
+        if not args.quick:
+            required.extend(value["passed"] for value in report["checks"]["double_mesh_events"].values())
+            required.append(report["checks"]["double_mesh_freefall"]["passed"])
+        report["passed"] = all(required)
     except Exception as exc:
         report["passed"] = False
         report["error"] = f"{type(exc).__name__}: {exc}"

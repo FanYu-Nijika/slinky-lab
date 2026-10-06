@@ -1,0 +1,146 @@
+{
+  "created_at": "2026-10-06T18:43:47.860964+00:00",
+  "model_version": "helical-box-cable-v2",
+  "engine_version": "3.15.0",
+  "software": {
+    "pytest_passed": 46,
+    "browser_tests_passed": 5,
+    "linux_container_ci": "passed on initial main; current changes awaiting CI"
+  },
+  "model_checks": {
+    "mass_radial_frame_reference_force_and_nonadjacent_contact": "passed"
+  },
+  "drop": {
+    "records": [
+      {
+        "name": "16spt_dt6.25e-6",
+        "config": {
+          "schema_version": 1,
+          "name": "drop-refined-16spt_dt6.25e-6",
+          "scenario": "drop",
+          "material": {
+            "turns": 3,
+            "radius": 0.03,
+            "strip_width": 0.003,
+            "strip_thickness": 0.0015,
+            "pitch": 0.002,
+            "mass": 0.012,
+            "young_modulus": 100000000.0,
+            "shear_modulus": 37037037.03703704,
+            "damping": 1e-05,
+            "friction": 0.5
+          },
+          "scene": {
+            "gravity": 9.81,
+            "step_height": 0.04,
+            "step_depth": 0.08,
+            "step_width": 0.3,
+            "step_count": 6,
+            "tilt_deg": 25.0,
+            "initial_angular_velocity": 0.0,
+            "initial_forward_velocity": 0.0,
+            "launch_offset": 0.0,
+            "settle_time": 2.0
+          },
+          "numerics": {
+            "profile": "preview",
+            "duration": 0.18,
+            "sample_hz": 100,
+            "segments_per_turn": 16,
+            "timestep": 6.25e-06,
+            "max_wall_seconds": 600.0
+          },
+          "provenance": {
+            "purpose": "drop-16-to-32-convergence",
+            "source": "local numerical validation"
+          }
+        },
+        "wall_seconds": 24.51600000000326,
+        "onset_s": 0.0619374999999942,
+        "collapse_s": 0.13780625000001429,
+        "com_max_error_m": 8.836909535259174e-05,
+        "native_relative_force_residual": 0.0,
+        "anchor_error_m": 3.2862156033597323e-06,
+        "max_penetration_m": 0.0019235051175297024,
+        "warnings": []
+      },
+      {
+        "name": "32spt_dt3.125e-6",
+        "config": {
+          "schema_version": 1,
+          "name": "drop-refined-32spt_dt3.125e-6",
+          "scenario": "drop",
+          "material": {
+            "turns": 3,
+            "radius": 0.03,
+            "strip_width": 0.003,
+            "strip_thickness": 0.0015,
+            "pitch": 0.002,
+            "mass": 0.012,
+            "young_modulus": 100000000.0,
+            "shear_modulus": 37037037.03703704,
+            "damping": 1e-05,
+            "friction": 0.5
+          },
+          "scene": {
+            "gravity": 9.81,
+            "step_height": 0.04,
+            "step_depth": 0.08,
+            "step_width": 0.3,
+            "step_count": 6,
+            "tilt_deg": 25.0,
+            "initial_angular_velocity": 0.0,
+            "initial_forward_velocity": 0.0,
+            "launch_offset": 0.0,
+            "settle_time": 2.0
+          },
+          "numerics": {
+            "profile": "preview",
+            "duration": 0.18,
+            "sample_hz": 100,
+            "segments_per_turn": 32,
+            "timestep": 3.125e-06,
+            "max_wall_seconds": 600.0
+          },
+          "provenance": {
+            "purpose": "drop-16-to-32-convergence",
+            "source": "local numerical validation"
+          }
+        },
+        "wall_seconds": 254.70300000000861,
+        "onset_s": 0.06473749999999835,
+        "collapse_s": 0.13862812500009375,
+        "com_max_error_m": 4.2380002888232904e-05,
+        "native_relative_force_residual": 0.0,
+        "anchor_error_m": 5.9928787798368965e-06,
+        "max_penetration_m": 0.0011433454438530984,
+        "warnings": []
+      }
+    ],
+    "half_dt_event_relative_changes": {
+      "onset": 0.000807,
+      "collapse": 0.000136
+    },
+    "mesh_event_relative_changes": {
+      "onset": 0.04520686175587351,
+      "collapse": 0.005963989297142754
+    },
+    "numerical_event_convergence": "passed at 16 to 32 segments/turn, 5% criterion",
+    "contact_note": "Soft contact penetration remains up to 1.143 mm at 32 segments; energy estimates are diagnostic."
+  },
+  "static_literature_fit": {
+    "measured_target_length_m": 1.14,
+    "fitted_length_m": 1.1373664406870883,
+    "relative_error": 0.002310139748168113,
+    "segments_per_turn": 8,
+    "status": "fit_passed",
+    "independent_experimental_support": false
+  },
+  "stairs": {
+    "status": "three_stable_flips_not_yet_confirmed",
+    "contact_refinement": "in progress"
+  },
+  "experimental_support": "not established; static length was used for fitting",
+  "overall_acceptance": false,
+  "latest_promotion_allowed": false
+}

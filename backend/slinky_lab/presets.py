@@ -26,6 +26,19 @@ def _preset_config(scenario: str, **overrides: Any) -> RunConfig:
 def _definitions() -> list[dict[str, Any]]:
     return [
         {
+            "id": "drop-validation",
+            "label": "下落验证小算例（3 圈）",
+            "description": "原生平衡、质心自由落体和16→32段收敛已检查；接触穿透与计算成本见验证报告。",
+            "config": _preset_config(
+                "drop", name="下落数值验证小算例",
+                material={"turns": 3, "mass": 0.012, "pitch": 0.002, "young_modulus": 1e8, "shear_modulus": 1e8 / 2.7},
+                numerics={"segments_per_turn": 16, "timestep": 0.0000125, "duration": 0.18, "sample_hz": 100},
+                provenance={"preset": "drop-validation", "geometry_material": "explicit demonstration assumptions, not measured plastic slinky",
+                            "numerical_evidence": "docs/validation-results.json; 16 to 32 segments and halved dt",
+                            "experimental_support": "not established"},
+            ).model_dump(mode="json"),
+        },
+        {
             "id": "drop-preview",
             "label": "自由下落（预览）",
             "description": "顶端约束静置后释放，用于检查质心自由落体与接触前动力学。",
@@ -66,14 +79,16 @@ def _definitions() -> list[dict[str, Any]]:
         },
         {
             "id": "literature-39-turn",
-            "label": "文献 39 圈独立预设",
-            "description": "按文献复现实验的圈数单独保留；材料参数和接触参数仍需实验标定。",
+            "label": "文献 39 圈（静态拟合）",
+            "description": "8段/圈静态悬挂长度拟合到1.137m；离散加密与下落时序需要独立验证，计算较慢。",
             "config": _preset_config(
                 "drop",
                 name="文献 39 圈独立预设",
-                material={"turns": 39, "pitch": 0.066 / 39.0},
+                material={"turns": 39, "pitch": 0.066 / 39.0, "mass": 0.0487,
+                          "young_modulus": 1422099858.232027, "shear_modulus": 526703651.197047},
                 scene={"tilt_deg": 0.0},
-                numerics={"profile": "preview", "duration": 1.5, "segments_per_turn": 12, "timestep": 0.0002},
+                numerics={"profile": "preview", "duration": 0.35, "segments_per_turn": 8,
+                          "timestep": 0.00001, "max_wall_seconds": 7200},
                 provenance={
                     "preset": "literature-39-turn",
                     "source": "Cross and Wheatland (2012), arXiv:1208.4629",
@@ -81,7 +96,8 @@ def _definitions() -> list[dict[str, Any]]:
                     "source_doi": "10.1119/1.4750489",
                     "reported_observations": "plastic B: 39 turns, mass 0.0487 kg, compression 0.066 m, suspended length 1.14 m, fitted bulk stiffness 0.22 N/m",
                     "parameter_mapping": "pitch=0.066/39 is an explicit geometric approximation; radius, section, friction, Young modulus and shear modulus are not measured in the source",
-                    "calibration": "independent literature preset; not a calibrated reproduction",
+                    "calibration": "close-coiled k to G mapping followed by native static-length fitting at 8 segments/turn; E=2.7G assumed",
+                    "static_fit": "1.137366 m vs fitted target 1.14 m; relative error 0.231%; not independent experimental validation",
                 },
             ).model_dump(mode="json"),
         },

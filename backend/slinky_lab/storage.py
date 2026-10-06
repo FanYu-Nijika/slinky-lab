@@ -38,6 +38,23 @@ ARTIFACT_NAMES = {
 }
 RUN_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 JSON_FIELD_BYTES = 65536
+CONTACT_DETAILS_BYTES = 524288
+CONTACT_COLUMNS = (
+    "x",
+    "y",
+    "z",
+    "geom_a",
+    "geom_b",
+    "normal_force",
+    "kind_code",
+    "stair_step",
+    "material_index",
+    "surface_code",
+)
+CONTACT_KIND_CODES = {"self": 0, "stair": 1, "external": 2}
+CONTACT_SURFACE_CODES = {"other": 0, "tread": 1}
+CONTACT_KIND_NAMES = {value: key for key, value in CONTACT_KIND_CODES.items()}
+CONTACT_SURFACE_NAMES = {value: key for key, value in CONTACT_SURFACE_CODES.items()}
 
 
 def utc_now() -> str:
@@ -403,7 +420,12 @@ class DataStore:
 
 
 class TrajectoryWriter:
-    """Append-only HDF5 writer with JSON side datasets for variable fields."""
+    """Append-only v3 HDF5 writer with numeric variable-contact arrays.
+
+    Contact counts are stored beside the growable arrays.  The reader uses the
+    committed frame attribute as the publication barrier, so a reader never
+    observes a frame while its arrays are being resized or filled.
+    """
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -411,26 +433,75 @@ class TrajectoryWriter:
         self.file = h5py.File(self.path, "w", libver="latest")
         self._count = 0
         self._shape: tuple[int, int] | None = None
-        self.file.attrs["format"] = "slinky-lab-trajectory-v1"
+        self.file.attrs["format"] = "slinky-lab-trajectory-v3"
+        self.file.attrs["contact_columns"] = json.dumps(CONTACT_COLUMNS, separators=(",", ":"))
+        self.file.attrs["contact_kind_codes"] = json.dumps(CONTACT_KIND_CODES, separators=(",", ":"))
+        self.file.attrs["contact_surface_codes"] = json.dumps(CONTACT_SURFACE_CODES, separators=(",", ":"))
         self.file.create_dataset("time", shape=(0,), maxshape=(None,), dtype="f8", compression="gzip", compression_opts=4)
         self.file.create_dataset("positions", shape=(0, 0, 3), maxshape=(None, None, 3), dtype="f8", compression="gzip", compression_opts=4)
         self.file.create_dataset("quaternions", shape=(0, 0, 4), maxshape=(None, None, 4), dtype="f8", compression="gzip", compression_opts=4)
-        self.file.create_dataset("contacts_json", shape=(0,), maxshape=(None,), dtype=f"S{JSON_FIELD_BYTES}", compression="gzip", compression_opts=4, shuffle=True)
+        self.file.create_dataset("contacts", shape=(0, 0, 3), maxshape=(None, None, 3), dtype="f8", compression="gzip", compression_opts=4, shuffle=True)
+        self.file.create_dataset("contact_counts", shape=(0,), maxshape=(None,), dtype="u8", compression="gzip", compression_opts=4, shuffle=True)
+        self.file.create_dataset("contact_details", shape=(0, 0, len(CONTACT_COLUMNS)), maxshape=(None, None, len(CONTACT_COLUMNS)), dtype="f8", compression="gzip", compression_opts=4, shuffle=True)
+        self.file.create_dataset("contact_detail_counts", shape=(0,), maxshape=(None,), dtype="u8", compression="gzip", compression_opts=4, shuffle=True)
         self.file.create_dataset("metrics_json", shape=(0,), maxshape=(None,), dtype=f"S{JSON_FIELD_BYTES}", compression="gzip", compression_opts=4, shuffle=True)
         self.file.attrs["committed_frames"] = 0
         self.file.flush()
         self.file.swmr_mode = True
 
+    def _resize_first_axis(self, name: str, count: int) -> None:
+        dataset = self.file[name]
+        shape = list(dataset.shape)
+        shape[0] = count
+        dataset.resize(tuple(shape))
+
+    def _resize_contact_axis(self, name: str, frame_count: int, width: int) -> None:
+        dataset = self.file[name]
+        shape = list(dataset.shape)
+        shape[0] = frame_count
+        shape[1] = max(shape[1], width)
+        dataset.resize(tuple(shape))
+
+    @staticmethod
+    def _contact_detail_array(details: list[Any]) -> np.ndarray:
+        result = np.zeros((len(details), len(CONTACT_COLUMNS)), dtype=np.float64)
+        for index, detail in enumerate(details):
+            # ``Frame`` validation makes each entry a Contact model.  Keeping
+            # this explicit also supports callers that pass a plain mapping.
+            item = detail.model_dump() if hasattr(detail, "model_dump") else detail
+            result[index, 0:3] = np.asarray(item["position"], dtype=np.float64)
+            result[index, 3] = int(item["geom_a"])
+            result[index, 4] = int(item["geom_b"])
+            result[index, 5] = float(item["normal_force"])
+            result[index, 6] = CONTACT_KIND_CODES[item["kind"]]
+            result[index, 7] = -1 if item["stair_step"] is None else int(item["stair_step"])
+            result[index, 8] = -1 if item["material_index"] is None else int(item["material_index"])
+            result[index, 9] = CONTACT_SURFACE_CODES[item["surface"]]
+        return result
+
     def append(self, frame: Frame | dict[str, Any]) -> None:
         model = frame if isinstance(frame, Frame) else Frame.model_validate(frame)
         positions = np.asarray(model.positions, dtype=np.float64)
         quaternions = np.asarray(model.quaternions, dtype=np.float64)
+        contacts = np.asarray(model.contacts, dtype=np.float64)
+        if contacts.size == 0:
+            contacts = np.empty((0, 3), dtype=np.float64)
+        details = self._contact_detail_array(model.contact_details)
         if positions.ndim != 2 or positions.shape[-1] != 3:
             raise ValueError("Frame positions must have shape (n, 3)")
         if quaternions.ndim != 2 or quaternions.shape[-1] != 4 or len(quaternions) != len(positions):
             raise ValueError("Frame quaternions must have shape (n, 4)")
-        if not np.isfinite(positions).all() or not np.isfinite(quaternions).all() or not np.isfinite(model.time):
+        if contacts.ndim != 2 or contacts.shape[-1] != 3:
+            raise ValueError("Frame contacts must have shape (n, 3)")
+        if details.ndim != 2 or details.shape[-1] != len(CONTACT_COLUMNS):
+            raise ValueError("Frame contact details have an invalid numeric shape")
+        if (not np.isfinite(positions).all() or not np.isfinite(quaternions).all()
+                or not np.isfinite(contacts).all() or not np.isfinite(details).all()
+                or not np.isfinite(model.time)):
             raise ValueError("Frame contains non-finite values")
+        metrics_encoded = dump_json(model.metrics).encode("utf-8")
+        if len(metrics_encoded) > JSON_FIELD_BYTES:
+            raise ValueError("metrics_json exceeds the trajectory JSON field limit")
         if self._shape is None:
             self._shape = (len(positions), len(quaternions))
             self.file["positions"].resize((0, len(positions), 3))
@@ -438,26 +509,19 @@ class TrajectoryWriter:
         if len(positions) != self._shape[0] or len(quaternions) != self._shape[1]:
             raise ValueError("Frame geometry count changed during a run")
         new_count = self._count + 1
-        for name, value in (
-            ("time", model.time),
-            ("positions", positions),
-            ("quaternions", quaternions),
-        ):
-            dataset = self.file[name]
-            shape = list(dataset.shape)
-            shape[0] = new_count
-            dataset.resize(tuple(shape))
-            dataset[self._count] = value
-        for name, value in (
-            ("contacts_json", model.contacts),
-            ("metrics_json", model.metrics),
-        ):
-            encoded = dump_json(value).encode("utf-8")
-            if len(encoded) > JSON_FIELD_BYTES:
-                raise ValueError(f"{name} exceeds the trajectory JSON field limit")
-            dataset = self.file[name]
-            dataset.resize((new_count,))
-            dataset[self._count] = encoded
+        for name, value in (("time", model.time), ("positions", positions), ("quaternions", quaternions)):
+            self._resize_first_axis(name, new_count)
+            self.file[name][self._count] = value
+        self._resize_contact_axis("contacts", new_count, len(contacts))
+        self.file["contacts"][self._count, :len(contacts)] = contacts
+        self.file["contact_counts"].resize((new_count,))
+        self.file["contact_counts"][self._count] = len(contacts)
+        self._resize_contact_axis("contact_details", new_count, len(details))
+        self.file["contact_details"][self._count, :len(details)] = details
+        self.file["contact_detail_counts"].resize((new_count,))
+        self.file["contact_detail_counts"][self._count] = len(details)
+        self._resize_first_axis("metrics_json", new_count)
+        self.file["metrics_json"][self._count] = metrics_encoded
         self._count = new_count
         self.flush()
 
@@ -477,6 +541,49 @@ class TrajectoryWriter:
         self.close()
 
 
+def _decode_fixed_string(value: Any) -> str:
+    if isinstance(value, bytes):
+        return value.rstrip(b"\x00").decode("utf-8")
+    return str(value)
+
+
+def _decode_contact_details(
+    rows: np.ndarray,
+    count: int,
+    kind_names: dict[int, str] | None = None,
+    surface_names: dict[int, str] | None = None,
+) -> list[dict[str, Any]]:
+    details: list[dict[str, Any]] = []
+    kind_names = kind_names or CONTACT_KIND_NAMES
+    surface_names = surface_names or CONTACT_SURFACE_NAMES
+    for row in np.asarray(rows[:max(0, count)], dtype=np.float64):
+        kind_code = int(round(float(row[6])))
+        surface_code = int(round(float(row[9])))
+        stair_step = int(round(float(row[7])))
+        material_index = int(round(float(row[8])))
+        details.append({
+            "position": [float(value) for value in row[:3]],
+            "geom_a": int(round(float(row[3]))),
+            "geom_b": int(round(float(row[4]))),
+            "normal_force": float(row[5]),
+            "kind": kind_names.get(kind_code, "external"),
+            "stair_step": None if stair_step < 0 else stair_step,
+            "material_index": None if material_index < 0 else material_index,
+            "surface": surface_names.get(surface_code, "other"),
+        })
+    return details
+
+
+def _read_code_names(file: h5py.File, attribute: str, fallback: dict[str, int]) -> dict[int, str]:
+    raw = file.attrs.get(attribute)
+    try:
+        encoded = _decode_fixed_string(raw)
+        mapping = json.loads(encoded)
+        return {int(value): str(key) for key, value in mapping.items()}
+    except (AttributeError, TypeError, ValueError, json.JSONDecodeError):
+        return {int(value): key for key, value in fallback.items()}
+
+
 def read_frames(path: str | Path, start: int = 0, limit: int | None = 120) -> tuple[list[dict[str, Any]], int]:
     path = Path(path)
     if not path.is_file():
@@ -489,11 +596,29 @@ def read_frames(path: str | Path, start: int = 0, limit: int | None = 120) -> tu
         # SWMR metadata flush yet.  The next poll will see the frame.
         return [], 0
     with file:
-        for name in ("time", "positions", "quaternions", "contacts_json", "metrics_json"):
+        base_fields = [name for name in ("time", "positions", "quaternions", "metrics_json") if name in file]
+        if len(base_fields) != 4:
+            return [], 0
+        v3_contacts = "contacts" in file and "contact_counts" in file
+        v3_details = v3_contacts and "contact_details" in file and "contact_detail_counts" in file
+        kind_names = _read_code_names(file, "contact_kind_codes", CONTACT_KIND_CODES)
+        surface_names = _read_code_names(file, "contact_surface_codes", CONTACT_SURFACE_CODES)
+        old_contacts = not v3_contacts and "contacts_json" in file
+        old_details = old_contacts and "contact_details_json" in file
+        fields = list(base_fields)
+        if v3_contacts:
+            fields.extend(("contacts", "contact_counts"))
+        elif old_contacts:
+            fields.append("contacts_json")
+        if v3_details:
+            fields.extend(("contact_details", "contact_detail_counts"))
+        elif old_details:
+            fields.append("contact_details_json")
+        for name in fields:
             refresh = getattr(file[name], "refresh", None)
             if callable(refresh):
                 refresh()
-        available = min(int(file[name].shape[0]) for name in ("time", "positions", "quaternions", "contacts_json", "metrics_json"))
+        available = min(int(file[name].shape[0]) for name in fields)
         committed = int(file.attrs.get("committed_frames", available))
         total = min(available, max(0, committed))
         if limit is None:
@@ -503,19 +628,27 @@ def read_frames(path: str | Path, start: int = 0, limit: int | None = 120) -> tu
         end = min(total, start + limit)
         frames = []
         for index in range(start, end):
-            contacts = file["contacts_json"][index]
-            metrics = file["metrics_json"][index]
-            if isinstance(contacts, bytes):
-                contacts = contacts.rstrip(b"\x00").decode("utf-8")
-            if isinstance(metrics, bytes):
-                metrics = metrics.rstrip(b"\x00").decode("utf-8")
-            frames.append(
-                {
-                    "time": float(file["time"][index]),
-                    "positions": file["positions"][index].tolist(),
-                    "quaternions": file["quaternions"][index].tolist(),
-                    "contacts": load_json(contacts, []),
-                    "metrics": load_json(metrics, {}),
-                }
-            )
+            metrics = load_json(_decode_fixed_string(file["metrics_json"][index]), {})
+            if v3_contacts:
+                contact_count = int(file["contact_counts"][index])
+                contacts = file["contacts"][index, :max(0, contact_count)].tolist()
+            elif old_contacts:
+                contacts = load_json(_decode_fixed_string(file["contacts_json"][index]), [])
+            else:
+                contacts = []
+            if v3_details:
+                detail_count = int(file["contact_detail_counts"][index])
+                details = _decode_contact_details(file["contact_details"][index], detail_count, kind_names, surface_names)
+            elif old_details:
+                details = load_json(_decode_fixed_string(file["contact_details_json"][index]), [])
+            else:
+                details = []
+            frames.append({
+                "time": float(file["time"][index]),
+                "positions": file["positions"][index].tolist(),
+                "quaternions": file["quaternions"][index].tolist(),
+                "contacts": contacts,
+                "contact_details": details,
+                "metrics": metrics,
+            })
     return frames, total

@@ -1,8 +1,10 @@
+import numpy as np
 import pytest
 
 
 mujoco = pytest.importorskip("mujoco")
 
+from slinky_lab import MODEL_VERSION
 from slinky_lab.physics import Simulation
 from slinky_lab.schemas import Numerics, RunConfig, Scene
 
@@ -24,7 +26,7 @@ def test_box_cable_model_exposes_material_order_and_metadata():
     assert all(len(size) == 3 for size in metadata["half_sizes"])
     assert metadata["coordinate_system"]["quaternion"] == "wxyz"
     assert metadata["engine_version"] == "3.15.0"
-    assert metadata["model_version"] == "helical-box-cable-v1"
+    assert metadata["model_version"] == MODEL_VERSION
     assert "instance=\"rod_material\"" in simulation.model_xml
 
 
@@ -52,3 +54,32 @@ def test_stairs_model_contains_static_geometry_and_real_contacts_can_be_reported
     assert simulation.frame()["contacts"] is not None
     assert simulation.summary()["max_penetration"] >= 0.0
     assert simulation.summary()["movement_classification"] in {"no_step_contact", "sliding", "flip"}
+
+
+def test_reference_geometry_preserves_chords_radial_section_and_mass():
+    simulation = Simulation(_config("drop"))
+    vertices = simulation._rest_vertices
+    frames = np.asarray(simulation._rest_frames)
+    assert np.linalg.norm(vertices[:, :2], axis=1) == pytest.approx(simulation.config.material.radius)
+    assert abs(vertices[0, 2] - vertices[-1, 2]) == pytest.approx(simulation._height)
+    assert np.linalg.norm(np.diff(vertices, axis=0), axis=1) == pytest.approx(simulation._rest_lengths)
+    assert frames.transpose(0, 2, 1) @ frames == pytest.approx(np.broadcast_to(np.eye(3), frames.shape), abs=1e-12)
+    assert np.linalg.det(frames) == pytest.approx(np.ones(len(frames)), abs=1e-12)
+    assert simulation._model_mass == pytest.approx(simulation.config.material.mass, rel=1e-10)
+    assert simulation.data.ncon == 0
+    assert np.linalg.norm(simulation.data.qfrc_passive) < 1e-12
+
+
+def test_nonadjacent_turns_have_real_self_contact_after_bending():
+    config = RunConfig.model_validate({"scenario": "drop", "material": {"turns": 3},
+                                     "numerics": {"segments_per_turn": 8}})
+    simulation = Simulation(config)
+    joint = simulation.model.joint("J_1")
+    qadr = int(joint.qposadr[0])
+    angle = -0.08
+    simulation.data.qpos[qadr:qadr + 4] = [np.cos(angle / 2), 0, np.sin(angle / 2), 0]
+    mujoco.mj_forward(simulation.model, simulation.data)
+    pairs = [(simulation._cable_geom_to_material.get(int(contact.geom[0]), -1),
+              simulation._cable_geom_to_material.get(int(contact.geom[1]), -1))
+             for contact in simulation.data.contact]
+    assert any(a >= 0 and b >= 0 and abs(a - b) >= 6 for a, b in pairs)

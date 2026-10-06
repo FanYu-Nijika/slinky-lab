@@ -1,0 +1,275 @@
+[
+  {
+    "config": {
+      "schema_version": 1,
+      "name": "彩虹圈实验",
+      "scenario": "drop",
+      "material": {
+        "turns": 39,
+        "radius": 0.03,
+        "strip_width": 0.003,
+        "strip_thickness": 0.0015,
+        "pitch": 0.0016923076923076924,
+        "mass": 0.0487,
+        "young_modulus": 1695865528.7967825,
+        "shear_modulus": 628098343.9988083,
+        "damping": 1e-05,
+        "friction": 0.5
+      },
+      "scene": {
+        "gravity": 9.81,
+        "step_height": 0.04,
+        "step_depth": 0.08,
+        "step_width": 0.3,
+        "step_count": 6,
+        "tilt_deg": 25,
+        "initial_angular_velocity": 0,
+        "initial_forward_velocity": 0,
+        "launch_offset": 0,
+        "settle_time": 2
+      },
+      "numerics": {
+        "profile": "preview",
+        "duration": 1.5,
+        "sample_hz": 60,
+        "segments_per_turn": 8,
+        "timestep": 2.5e-05,
+        "max_wall_seconds": 600
+      },
+      "provenance": {
+        "source": "https://arxiv.org/abs/1208.4629",
+        "assumptions": "R=.03m, width=.003m, thickness=.0015m, nu=.35; held material endpoint"
+      }
+    },
+    "initial_mapping": {
+      "bulk_stiffness_n_m": 0.22,
+      "poisson_ratio_assumed": 0.35,
+      "shear_modulus_pa": 628098343.9988083,
+      "young_modulus_pa": 1695865528.7967825,
+      "torsion_constant_m4": 2.317412109375e-12,
+      "method": "k = G*J / (2*pi*R^3*N), close-coiled torsion approximation",
+      "status": "initial_estimate_requires_native_static_calibration"
+    },
+    "moduli_scale": 1.0,
+    "solver": {
+      "status": "converged",
+      "success": true,
+      "message": "The relative error between two consecutive iterates is at most 0.000000",
+      "calls": 26251,
+      "support_calls": 11,
+      "optimizer_success": true,
+      "support_success": true,
+      "initial_contacts": 0,
+      "contacts": 0,
+      "support_adjustment": [
+        -1.7170915181324012e-16,
+        7.545406179188742e-17,
+        -2.1459155154779218e-05
+      ],
+      "native_force_residual_max": 2.0323204453499773e-16,
+      "native_global_residual_max": 0.4777470000007829,
+      "anchor_error_m": 2.1459155154779364e-05,
+      "qpos_finite": true,
+      "restored": false,
+      "wall_seconds": 42.655999999988126,
+      "initial_residual_norm": 9.460601662779533,
+      "initial_residual_max_normalized": 0.9557675586159188,
+      "full_mass_acceleration_residual_max": 0.0,
+      "normalized_native_torque_residual": 1.4179893300196121e-14,
+      "normalized_full_force_residual": 0.0,
+      "manual_forward_passive_max_error": 0.0,
+      "manual_forward_bias_max_error": 0.0,
+      "force_residual_tolerance": 0.001,
+      "anchor_tolerance_m": 0.0002
+    },
+    "length_m": 0.9835578701834418,
+    "relative_length_error": 0.13722993843557732,
+    "native_relative_force_residual": 0.0,
+    "anchor_error_m": 2.1459155154779364e-05,
+    "fit_target_length_m": 1.14,
+    "experimental_support": false,
+    "method": "static length fitted, not independently validated"
+  },
+  {
+    "config": {
+      "schema_version": 1,
+      "name": "彩虹圈实验",
+      "scenario": "drop",
+      "material": {
+        "turns": 39,
+        "radius": 0.03,
+        "strip_width": 0.003,
+        "strip_thickness": 0.0015,
+        "pitch": 0.0016923076923076924,
+        "mass": 0.0487,
+        "young_modulus": 1448840561.1920784,
+        "shear_modulus": 536607615.25632524,
+        "damping": 1e-05,
+        "friction": 0.5
+      },
+      "scene": {
+        "gravity": 9.81,
+        "step_height": 0.04,
+        "step_depth": 0.08,
+        "step_width": 0.3,
+        "step_count": 6,
+        "tilt_deg": 25,
+        "initial_angular_velocity": 0,
+        "initial_forward_velocity": 0,
+        "launch_offset": 0,
+        "settle_time": 2
+      },
+      "numerics": {
+        "profile": "preview",
+        "duration": 1.5,
+        "sample_hz": 60,
+        "segments_per_turn": 8,
+        "timestep": 2.5e-05,
+        "max_wall_seconds": 600
+      },
+      "provenance": {
+        "source": "https://arxiv.org/abs/1208.4629",
+        "assumptions": "R=.03m, width=.003m, thickness=.0015m, nu=.35; held material endpoint"
+      }
+    },
+    "initial_mapping": {
+      "bulk_stiffness_n_m": 0.22,
+      "poisson_ratio_assumed": 0.35,
+      "shear_modulus_pa": 628098343.9988083,
+      "young_modulus_pa": 1695865528.7967825,
+      "torsion_constant_m4": 2.317412109375e-12,
+      "method": "k = G*J / (2*pi*R^3*N), close-coiled torsion approximation",
+      "status": "initial_estimate_requires_native_static_calibration"
+    },
+    "moduli_scale": 0.8543369368560911,
+    "solver": {
+      "status": "converged",
+      "success": true,
+      "message": "The relative error between two consecutive iterates is at most 0.000000",
+      "calls": 37496,
+      "support_calls": 11,
+      "optimizer_success": true,
+      "support_success": true,
+      "initial_contacts": 0,
+      "contacts": 0,
+      "support_adjustment": [
+        3.2202954716479714e-17,
+        1.0929085752185864e-16,
+        -2.145915515472191e-05
+      ],
+      "native_force_residual_max": 1.5612511283791264e-16,
+      "native_global_residual_max": 0.4777470000007829,
+      "anchor_error_m": 2.1459155154723852e-05,
+      "qpos_finite": true,
+      "restored": false,
+      "wall_seconds": 61.0,
+      "initial_residual_norm": 10.665084668179379,
+      "initial_residual_max_normalized": 1.0977781866469423,
+      "full_mass_acceleration_residual_max": 0.0,
+      "normalized_native_torque_residual": 1.0893151454476684e-14,
+      "normalized_full_force_residual": 0.0,
+      "manual_forward_passive_max_error": 0.0,
+      "manual_forward_bias_max_error": 0.0,
+      "force_residual_tolerance": 0.001,
+      "anchor_tolerance_m": 0.0002
+    },
+    "length_m": 1.1201775876874502,
+    "relative_length_error": 0.01738808097592076,
+    "native_relative_force_residual": 0.0,
+    "anchor_error_m": 2.1459155154723852e-05,
+    "fit_target_length_m": 1.14,
+    "experimental_support": false,
+    "method": "static length fitted, not independently validated"
+  },
+  {
+    "config": {
+      "schema_version": 1,
+      "name": "彩虹圈实验",
+      "scenario": "drop",
+      "material": {
+        "turns": 39,
+        "radius": 0.03,
+        "strip_width": 0.003,
+        "strip_thickness": 0.0015,
+        "pitch": 0.0016923076923076924,
+        "mass": 0.0487,
+        "young_modulus": 1422099858.232027,
+        "shear_modulus": 526703651.197047,
+        "damping": 1e-05,
+        "friction": 0.5
+      },
+      "scene": {
+        "gravity": 9.81,
+        "step_height": 0.04,
+        "step_depth": 0.08,
+        "step_width": 0.3,
+        "step_count": 6,
+        "tilt_deg": 25,
+        "initial_angular_velocity": 0,
+        "initial_forward_velocity": 0,
+        "launch_offset": 0,
+        "settle_time": 2
+      },
+      "numerics": {
+        "profile": "preview",
+        "duration": 1.5,
+        "sample_hz": 60,
+        "segments_per_turn": 8,
+        "timestep": 2.5e-05,
+        "max_wall_seconds": 600
+      },
+      "provenance": {
+        "source": "https://arxiv.org/abs/1208.4629",
+        "assumptions": "R=.03m, width=.003m, thickness=.0015m, nu=.35; held material endpoint"
+      }
+    },
+    "initial_mapping": {
+      "bulk_stiffness_n_m": 0.22,
+      "poisson_ratio_assumed": 0.35,
+      "shear_modulus_pa": 628098343.9988083,
+      "young_modulus_pa": 1695865528.7967825,
+      "torsion_constant_m4": 2.317412109375e-12,
+      "method": "k = G*J / (2*pi*R^3*N), close-coiled torsion approximation",
+      "status": "initial_estimate_requires_native_static_calibration"
+    },
+    "moduli_scale": 0.8385687627255491,
+    "solver": {
+      "status": "converged",
+      "success": true,
+      "message": "The relative error between two consecutive iterates is at most 0.000000",
+      "calls": 33747,
+      "support_calls": 11,
+      "optimizer_success": true,
+      "support_success": true,
+      "initial_contacts": 0,
+      "contacts": 0,
+      "support_adjustment": [
+        8.789312140759307e-17,
+        1.2670776432289273e-16,
+        -2.145915515472073e-05
+      ],
+      "native_force_residual_max": 1.1796119636642288e-16,
+      "native_global_residual_max": 0.4777470000007829,
+      "anchor_error_m": 2.1459155154723852e-05,
+      "qpos_finite": true,
+      "restored": false,
+      "wall_seconds": 51.264999999984866,
+      "initial_residual_norm": 10.822186295571298,
+      "initial_residual_max_normalized": 1.1159509873795368,
+      "full_mass_acceleration_residual_max": 0.0,
+      "normalized_native_torque_residual": 8.230381098937938e-15,
+      "normalized_full_force_residual": 0.0,
+      "manual_forward_passive_max_error": 0.0,
+      "manual_forward_bias_max_error": 0.0,
+      "force_residual_tolerance": 0.001,
+      "anchor_tolerance_m": 0.0002
+    },
+    "length_m": 1.1373664406870883,
+    "relative_length_error": 0.002310139748168113,
+    "native_relative_force_residual": 0.0,
+    "anchor_error_m": 2.1459155154723852e-05,
+    "fit_target_length_m": 1.14,
+    "experimental_support": false,
+    "method": "static length fitted, not independently validated"
+  }
+]
