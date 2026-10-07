@@ -136,7 +136,7 @@ def support_evidence(summary: dict[str, Any]) -> dict[str, Any]:
             )
         }
         for event in events
-        if event.get("first_touch_label") == "middle"
+        if event.get("first_touch_label") == "middle" or event.get("first_sustained_label") == "middle" or event.get("middle_preceded")
     ]
     return {
         "candidate_flip_count": diagnostics.get("candidate_flip_count", 0),
@@ -372,6 +372,7 @@ def case_quality(record: dict[str, Any]) -> dict[str, Any]:
         and float(record.get("simulation_time") or 0.0) >= float(record.get("duration") or 0.0) - 1.0e-9
         and int(support.get("confirmed_flip_count", 0) or 0) >= 3
         and first_three_steps == [1, 2, 3]
+        and all(event.get("verified") and not event.get("ambiguous") and endpoint_support_time(event) is not None for event in first_three[:3])
     )
     return {"passed": passed, "reason": "completed, warning-free, finite, full duration, complete frame/export artifacts, and three confirmed supports on contiguous steps 1-3"}
 
@@ -380,13 +381,26 @@ def sequence_for(record: dict[str, Any]) -> list[str | None]:
     return [event.get("endpoint_label") for event in record.get("support", {}).get("first_three_endpoint_support_events", [])[:3]]
 
 
+def endpoint_support_time(event: dict[str, Any]) -> float | None:
+    label = event.get("endpoint_label")
+    supports = event.get("endpoint_supports") or []
+    if label not in {"first", "last"} or not supports or supports[0].get("label") != label:
+        return None
+    value = supports[0].get("time")
+    if not isinstance(value, (int, float)) or not math.isfinite(value):
+        return None
+    return float(value)
+
+
 def times_for(record: dict[str, Any]) -> list[float | None]:
-    return [event.get("first_sustained_time") for event in record.get("support", {}).get("first_three_endpoint_support_events", [])[:3]]
+    return [endpoint_support_time(event) for event in record.get("support", {}).get("first_three_endpoint_support_events", [])[:3]]
 
 
 def physical_signature(record: dict[str, Any]) -> dict[str, Any]:
     config = record.get("config", {})
-    return {"material": config.get("material", {}), "scene": config.get("scene", {})}
+    numerics = config.get("numerics", {})
+    fixed_numerics = {key: value for key, value in numerics.items() if key not in {"segments_per_turn", "timestep", "max_wall_seconds"}}
+    return {"scenario": config.get("scenario"), "material": config.get("material", {}), "scene": config.get("scene", {}), "fixed_numerics": fixed_numerics}
 
 
 def evaluate_convergence(records: list[dict[str, Any]], mode: str) -> dict[str, Any]:
@@ -396,7 +410,7 @@ def evaluate_convergence(records: list[dict[str, Any]], mode: str) -> dict[str, 
             "passed": case_quality(records[0])["passed"] if records else False,
             "rule": "--quick runs baseline only and does not evaluate discretization convergence.",
         }
-    if len(records) != 3:
+    if [record.get("name") for record in records] != [spec["name"] for spec in CASE_SPECS]:
         return {"status": "incomplete", "passed": False, "rule": "extended mode requires baseline, half_dt, and mesh"}
     quality = {record["name"]: case_quality(record) for record in records}
     baseline = records[0]
@@ -496,13 +510,46 @@ def load_base_preset() -> RunConfig:
     return config
 
 
+def recheck_report(output: Path) -> dict[str, Any]:
+    report = json.loads((output / "validation-summary.json").read_text(encoding="utf-8"))
+    records = report.get("cases", [])
+    for record in records:
+        errors = list(record.get("frame_errors") or [])
+        if record.get("name") not in {spec["name"] for spec in CASE_SPECS}:
+            record["frame_errors"] = ["Unknown validation case"]
+            continue
+        for name, expected in record.get("artifact_sha256", {}).items():
+            if Path(name).name != name or hash_file(output / record["name"] / name) != expected:
+                errors.append(f"Missing or changed evidence artifact: {name}")
+        if not record.get("artifact_sha256"):
+            errors.append("No artifact integrity manifest")
+        record["frame_errors"] = errors
+    report["original_convergence"] = report.get("convergence")
+    report["convergence"] = evaluate_convergence(records, report.get("mode", "extended"))
+    report["passed"] = bool(report["convergence"].get("passed"))
+    report["acceptance_recheck"] = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "criterion": "verified unambiguous endpoint support times and matching artifact hashes",
+        "checker_sha256": hash_file(Path(__file__)),
+    }
+    write_json(output / "validation-summary.json", report)
+    write_report(output, report)
+    return report
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the bounded stairs-walking numerical validation.")
     parser.add_argument("--output", type=Path, default=Path("reports/stairs-validation"))
-    parser.add_argument("--quick", action="store_true", help="Run only baseline; convergence is not evaluated.")
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument("--quick", action="store_true", help="Run only baseline; convergence is not evaluated.")
+    mode_group.add_argument("--recheck", action="store_true", help="Verify existing artifact hashes and reevaluate endpoint support convergence; run no simulation.")
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    if args.recheck:
+        report = recheck_report(output)
+        print(json.dumps({"report": str(output / "validation-summary.json"), "mode": "recheck", "passed": report["passed"]}, ensure_ascii=False))
+        return 0 if report["passed"] else 1
     mode = "quick" if args.quick else "extended"
     created_at = datetime.now(timezone.utc).isoformat()
     try:
