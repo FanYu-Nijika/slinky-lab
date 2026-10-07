@@ -1,11 +1,60 @@
 {
   "created_at": "2026-10-06T18:43:47.860964+00:00",
-  "model_version": "helical-box-cable-v2",
+  "model_version": "helical-box-cable-v3",
   "engine_version": "3.15.0",
   "software": {
-    "pytest_passed": 46,
-    "browser_tests_passed": 5,
-    "linux_container_ci": "passed on initial main; current changes awaiting CI"
+    "pytest_passed": 57,
+    "browser_tests_passed": 11,
+    "linux_container_ci": "3e4935896fcc707682485e747207ba1185476837 passed verify and real container/restart checks; new UI/control changes awaiting CI",
+    "windows_native_failure": {
+      "run_id": "6d793726139341cd93abf8fe677272da",
+      "error": "worker exited unexpectedly, Windows status 3221225477",
+      "simulation_time_s": 0.18,
+      "status": "reproduced HDF5 close/read race; fixed with cross-process file mutex; two actual streamed runs passed after fix",
+      "diagnostic_component": "h5py File.close in trajectory readback, after physical integration completed"
+    },
+    "repeated_stream_runtime": {
+      "passed": true,
+      "report": "docs/validation/runtime-stream-after-lock.json",
+      "runs": [
+        {
+          "run_id": "6ba5b56446014fa294edba82aacb49e9",
+          "status": "completed",
+          "checks": {
+            "terminal_completed": true,
+            "http_frames_complete": true,
+            "stream_terminal_result": true,
+            "stream_frame_count_matches_http": true,
+            "exports_complete": true
+          },
+          "frames": {
+            "total": 19,
+            "returned": 19,
+            "first_time": 0.0,
+            "last_time": 0.18,
+            "complete": true
+          }
+        },
+        {
+          "run_id": "4408caf27e904bc3ab32869a34d15552",
+          "status": "completed",
+          "checks": {
+            "terminal_completed": true,
+            "http_frames_complete": true,
+            "stream_terminal_result": true,
+            "stream_frame_count_matches_http": true,
+            "exports_complete": true
+          },
+          "frames": {
+            "total": 19,
+            "returned": 19,
+            "first_time": 0.0,
+            "last_time": 0.18,
+            "complete": true
+          }
+        }
+      ]
+    }
   },
   "model_checks": {
     "mass_radial_frame_reference_force_and_nonadjacent_contact": "passed"
@@ -62,7 +111,8 @@
         "native_relative_force_residual": 0.0,
         "anchor_error_m": 3.2862156033597323e-06,
         "max_penetration_m": 0.0019235051175297024,
-        "warnings": []
+        "warnings": [],
+        "model_version": "helical-box-cable-v2"
       },
       {
         "name": "32spt_dt3.125e-6",
@@ -114,7 +164,8 @@
         "native_relative_force_residual": 0.0,
         "anchor_error_m": 5.9928787798368965e-06,
         "max_penetration_m": 0.0011433454438530984,
-        "warnings": []
+        "warnings": [],
+        "model_version": "helical-box-cable-v2"
       }
     ],
     "half_dt_event_relative_changes": {
@@ -126,7 +177,108 @@
       "collapse": 0.005963989297142754
     },
     "numerical_event_convergence": "passed at 16 to 32 segments/turn, 5% criterion",
-    "contact_note": "Soft contact penetration remains up to 1.143 mm at 32 segments; energy estimates are diagnostic."
+    "contact_note": "Soft contact penetration remains up to 1.143 mm at 32 segments; energy estimates are diagnostic.",
+    "v3_quick_repeat": {
+      "passed": true,
+      "mode": "quick",
+      "checks": {
+        "held_native_equilibrium": {
+          "passed": true,
+          "relative_force_residual": 0.0,
+          "anchor_error_m": 1.8184398624110365e-06
+        },
+        "center_of_mass_freefall": {
+          "max_absolute_error_m": 0.00033061946804481546,
+          "relative_error": 0.0024263222647893453,
+          "passed": true
+        },
+        "work_balance": {
+          "kinetic_and_gravity_change_J": 0.0005686669543789012,
+          "total_work_J": 0.0006567384476927917,
+          "residual_J": -8.80714933138905e-05,
+          "note": "Power integral diagnostic, not an assertion that contact/friction conserves mechanical energy."
+        },
+        "half_timestep_trajectory": {
+          "max_absolute_error_m": 0.003411492430070759,
+          "note": "Trajectory diagnostic; this does not certify collapse-time or experimental agreement."
+        },
+        "half_timestep_events": {
+          "bottom_onset_time": {
+            "passed": true,
+            "relative_change": 0.002953874119555265,
+            "baseline_s": 0.055174999999998,
+            "refined_s": 0.05501249999999598
+          },
+          "collapse_time": {
+            "passed": true,
+            "relative_change": 0.003499079189671946,
+            "baseline_s": 0.13527499999998918,
+            "refined_s": 0.1357499999999871
+          }
+        },
+        "experimental_validation": {
+          "status": "not_established_by_this_check"
+        }
+      },
+      "model_version": "helical-box-cable-v3",
+      "engine_version": "3.15.0"
+    },
+    "v3_http_browser_repeat": {
+      "status": "completed",
+      "config": {
+        "schema_version": 1,
+        "name": "下落数值验证小算例",
+        "scenario": "drop",
+        "material": {
+          "turns": 3,
+          "radius": 0.03,
+          "strip_width": 0.003,
+          "strip_thickness": 0.0015,
+          "pitch": 0.002,
+          "mass": 0.012,
+          "young_modulus": 100000000.0,
+          "shear_modulus": 37037037.03703704,
+          "damping": 1e-05,
+          "friction": 0.5,
+          "self_friction": 0.5
+        },
+        "scene": {
+          "gravity": 9.81,
+          "step_height": 0.04,
+          "step_depth": 0.08,
+          "step_width": 0.3,
+          "step_count": 6,
+          "tilt_deg": 25.0,
+          "initial_angular_velocity": 0.0,
+          "initial_forward_velocity": 0.0,
+          "initial_lateral_velocity": 0.0,
+          "launch_offset": 0.0,
+          "settle_time": 2.0
+        },
+        "numerics": {
+          "profile": "preview",
+          "duration": 0.18,
+          "sample_hz": 100,
+          "segments_per_turn": 16,
+          "timestep": 1.25e-05,
+          "max_wall_seconds": 600.0,
+          "contact_time_constant": 0.003
+        },
+        "provenance": {
+          "preset": "drop-validation",
+          "geometry_material": "explicit demonstration assumptions, not measured plastic slinky",
+          "numerical_evidence": "docs/validation-results.json; 16 to 32 segments and halved dt",
+          "experimental_support": "not established"
+        }
+      },
+      "frame_count": 19,
+      "onset_s": 0.06198749999999521,
+      "collapse_s": 0.13778749999998688,
+      "prepare_status": "converged",
+      "max_com_error_m": 0.00017684789969721337,
+      "max_penetration_m": 0.0019263266330551466,
+      "source": "actual localhost HTTP/WS run; no browser fixture"
+    }
   },
   "static_literature_fit": {
     "measured_target_length_m": 1.14,
@@ -137,10 +289,138 @@
     "independent_experimental_support": false
   },
   "stairs": {
-    "status": "three_stable_flips_not_yet_confirmed",
-    "contact_refinement": "in progress"
+    "status": "baseline_three_flips_observed_mesh_refinement_pending",
+    "contact_refinement": "8 segments/turn, 50us baseline: three end supports; Linux 16 segments/turn and smaller-dt validation pending",
+    "world_axis_probe_records": [
+      {
+        "case": "A",
+        "report": "docs/validation/stairs-world-axis-A.json",
+        "config": {
+          "schema_version": 1,
+          "name": "stairs world-axis A v3",
+          "scenario": "stairs",
+          "material": {
+            "turns": 12,
+            "radius": 0.03,
+            "strip_width": 0.006,
+            "strip_thickness": 0.0045,
+            "pitch": 0.0055,
+            "mass": 0.0487,
+            "young_modulus": 20000000.0,
+            "shear_modulus": 7407407.407407407,
+            "damping": 1e-05,
+            "friction": 0.8,
+            "self_friction": 0.05
+          },
+          "scene": {
+            "gravity": 9.81,
+            "step_height": 0.04,
+            "step_depth": 0.08,
+            "step_width": 0.3,
+            "step_count": 6,
+            "tilt_deg": 45.0,
+            "initial_angular_velocity": 2.0,
+            "initial_forward_velocity": 0.05,
+            "initial_lateral_velocity": 0.0,
+            "launch_offset": 0.0,
+            "settle_time": 0.05
+          },
+          "numerics": {
+            "profile": "fine",
+            "duration": 2.4,
+            "sample_hz": 20,
+            "segments_per_turn": 8,
+            "timestep": 5e-05,
+            "max_wall_seconds": 600.0,
+            "contact_time_constant": 0.0005
+          },
+          "provenance": {
+            "experiment": "reports/stairs-world-axis",
+            "probe": "A",
+            "calibration": "explicit macro demonstration geometry; v3 world-axis angular velocity; no experimental support"
+          }
+        },
+        "movement_classification": "sliding",
+        "confirmed_flip_count": 0,
+        "candidate_flip_count": 0,
+        "maximum_penetration_m": 0.0013037740135000344
+      },
+      {
+        "case": "B",
+        "report": "docs/validation/stairs-world-axis-B.json",
+        "config": {
+          "schema_version": 1,
+          "name": "stairs world-axis B v3",
+          "scenario": "stairs",
+          "material": {
+            "turns": 12,
+            "radius": 0.03,
+            "strip_width": 0.006,
+            "strip_thickness": 0.0045,
+            "pitch": 0.0055,
+            "mass": 0.0487,
+            "young_modulus": 20000000.0,
+            "shear_modulus": 7407407.407407407,
+            "damping": 1e-05,
+            "friction": 0.8,
+            "self_friction": 0.05
+          },
+          "scene": {
+            "gravity": 9.81,
+            "step_height": 0.08,
+            "step_depth": 0.12,
+            "step_width": 0.3,
+            "step_count": 6,
+            "tilt_deg": 45.0,
+            "initial_angular_velocity": 2.0,
+            "initial_forward_velocity": 0.05,
+            "initial_lateral_velocity": 0.0,
+            "launch_offset": 0.015,
+            "settle_time": 0.05
+          },
+          "numerics": {
+            "profile": "fine",
+            "duration": 2.4,
+            "sample_hz": 20,
+            "segments_per_turn": 8,
+            "timestep": 5e-05,
+            "max_wall_seconds": 600.0,
+            "contact_time_constant": 0.0005
+          },
+          "provenance": {
+            "experiment": "reports/stairs-world-axis",
+            "probe": "B",
+            "calibration": "explicit macro demonstration geometry; v3 world-axis angular velocity; no experimental support"
+          }
+        },
+        "movement_classification": "side_fall",
+        "confirmed_flip_count": 0,
+        "candidate_flip_count": 0,
+        "maximum_penetration_m": 0.0026535382208822725
+      }
+    ],
+    "stopped_record": {
+      "report": "docs/validation/stairs-stopped.json",
+      "movement_classification": "stopped",
+      "quiet_duration_s": 0.6602499999999355,
+      "max_penetration_m": 6.477492349862807e-05
+    },
+    "baseline_three_steps": {
+      "report": "docs/validation/stairs-walking-baseline.json",
+      "movement_classification": "flip",
+      "confirmed_flip_count": 3,
+      "confirmed_endpoint_sequence": [
+        "last",
+        "first",
+        "last"
+      ],
+      "max_penetration_m": 0.0005473750576079836,
+      "mesh_refinement": "pending"
+    }
   },
   "experimental_support": "not established; static length was used for fitting",
   "overall_acceptance": false,
-  "latest_promotion_allowed": false
+  "latest_promotion_allowed": false,
+  "source_evidence_model_version": "helical-box-cable-v2",
+  "compatibility_note": "v3 changes the nonzero initial stair angular velocity from local to world +Y. Zero-angular-velocity drop and static v2 evidence remains applicable; v3 quick validation and an HTTP/browser drop run were repeated."
 }

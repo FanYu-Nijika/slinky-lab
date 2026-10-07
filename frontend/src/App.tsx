@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChartsPanel } from "./components/ChartsPanel";
 import { ParameterPanel } from "./components/ParameterPanel";
 import { RunHistory } from "./components/RunHistory";
@@ -8,7 +8,7 @@ import { Timeline } from "./components/Timeline";
 import { ApiError, createRun, createSweep, downloadArtifact, getAllFrames, getFrames, getPresets, getRun, getRuns, getSweep, sendCommand, streamUrl, uploadReference } from "./api";
 import { makePreviewFrame, makePreviewMetadata } from "./preview";
 import type { Frame, MetricKey, PresetInfo, RenderMetadata, RunConfig, RunResult, RunStatus, SweepResult } from "./types";
-import { DEFAULT_CONFIG } from "./types";
+import { DEFAULT_CONFIG, DEFAULT_DROP_VALIDATION_CONFIG } from "./types";
 
 const ACTIVE_STATUSES = new Set(["queued", "preparing", "running", "paused"]);
 
@@ -17,7 +17,7 @@ function cloneConfig(config: RunConfig): RunConfig {
 }
 
 export default function App() {
-  const [config, setConfig] = useState<RunConfig>(() => cloneConfig(DEFAULT_CONFIG));
+  const [config, setConfig] = useState<RunConfig>(() => cloneConfig(DEFAULT_DROP_VALIDATION_CONFIG));
   const [presets, setPresets] = useState<PresetInfo[]>([]);
   const [runs, setRuns] = useState<RunResult[]>([]);
   const [selectedRun, setSelectedRun] = useState<RunResult | null>(null);
@@ -34,8 +34,9 @@ export default function App() {
   const [error, setError] = useState("");
   const [showContacts, setShowContacts] = useState(false);
   const [showTrajectory, setShowTrajectory] = useState(true);
-  const [geometryMode, setGeometryMode] = useState<"boxes" | "smooth">("boxes");
+  const [geometryMode, setGeometryMode] = useState<"boxes" | "smooth">("smooth");
   const [cameraView, setCameraView] = useState<"orbit" | "front" | "side" | "top">("orbit");
+  const [followCamera, setFollowCamera] = useState(true);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [sweep, setSweep] = useState<SweepResult | null>(null);
@@ -45,9 +46,11 @@ export default function App() {
   const followLiveRef = useRef(true);
   const playbackTimerRef = useRef<number>();
   const generationRef = useRef(0);
+  const configEditedRef = useRef(false);
 
   const currentFrame = frames[currentIndex] || makePreviewFrame(config, 0);
-  const renderMetadata = metadata || makePreviewMetadata(config);
+  const previewMetadata = useMemo(() => makePreviewMetadata(config), [config]);
+  const renderMetadata = metadata || previewMetadata;
   const engineVersion = metadata?.engine_version || metadata?.mujoco_version;
   const hasPhysicalResult = Boolean(selectedId && frames.length && engineVersion && engineVersion !== "none");
 
@@ -57,8 +60,20 @@ export default function App() {
       if (cancelled) return;
       const presetResult = results[0];
       const runsResult = results[1];
-      if (presetResult.status === "fulfilled") setPresets(presetResult.value);
-      else setOnline(false);
+      if (presetResult.status === "fulfilled") {
+        setPresets(presetResult.value);
+        const validationPreset = presetResult.value.find((item) => item.id === "drop-validation" && item.config);
+        if (!configEditedRef.current && validationPreset?.config) {
+          setConfig(cloneConfig(validationPreset.config));
+          setDirty(false);
+        }
+      } else {
+        setOnline(false);
+        if (!configEditedRef.current) {
+          setConfig(cloneConfig(DEFAULT_DROP_VALIDATION_CONFIG));
+          setDirty(false);
+        }
+      }
       if (runsResult.status === "fulfilled") setRuns(runsResult.value);
       else setOnline(false);
     });
@@ -66,6 +81,7 @@ export default function App() {
   }, []);
 
   const applyRun = useCallback((run: RunResult, loadedFrames?: Frame[], loadedMetadata?: RenderMetadata) => {
+    configEditedRef.current = true;
     setSelectedRun(run);
     setSelectedId(run.run_id);
     setConfig(cloneConfig(run.config));
@@ -184,6 +200,7 @@ export default function App() {
   }, [isPlaying, speed, currentIndex, frames]);
 
   const changeConfig = (next: RunConfig) => {
+    configEditedRef.current = true;
     setConfig(next);
     setDirty(true);
     setError("");
@@ -203,6 +220,7 @@ export default function App() {
   };
 
   const handleRun = async () => {
+    configEditedRef.current = true;
     const generation = ++generationRef.current;
     setLoading(true);
     setError("");
@@ -304,6 +322,13 @@ export default function App() {
   const statusLabel = ({ preparing: "准备模型", queued: "排队中", running: "计算中", paused: "已暂停", completed: "已完成", failed: "失败", cancelled: "已取消", interrupted: "中断" } as Record<string, string>)[status] || status;
   const progress = selectedRun?.progress;
   const headline = selectedRun?.config?.name || config.name;
+  const modelVersionLabel = metadata?.model_version && engineVersion
+    ? `模型 ${metadata.model_version} · 引擎 ${engineVersion}`
+    : metadata?.model_version
+      ? `模型 ${metadata.model_version}`
+      : engineVersion
+        ? `引擎 ${engineVersion}`
+        : "模型 预览";
 
   return (
     <div className="app-shell">
@@ -316,16 +341,16 @@ export default function App() {
       <main className={`workspace ${leftCollapsed ? "left-hidden" : ""} ${rightCollapsed ? "right-hidden" : ""}`}>
         <ParameterPanel config={config} presets={presets} onChange={changeConfig} onPreset={choosePreset} collapsed={leftCollapsed} />
         <section className="center-column">
-          <div className="center-heading"><div><span className="eyebrow">{config.scenario === "stairs" ? "SCENARIO / STAIRS" : "SCENARIO / DROP"}</span><h1>{config.scenario === "stairs" ? "翻转下楼梯" : "悬挂下落"}<span className="model-pill">{config.numerics.profile === "fine" ? "FINE" : "PREVIEW"}</span></h1></div><div className="view-toggles"><button className={geometryMode === "boxes" ? "active" : ""} onClick={() => setGeometryMode("boxes")}>▦ 实体几何</button><button className={geometryMode === "smooth" ? "active" : ""} onClick={() => setGeometryMode("smooth")}>⌁ 平滑带状</button><button className={showContacts ? "active" : ""} onClick={() => setShowContacts((value) => !value)}>⊙ 接触点</button><button className={showTrajectory ? "active" : ""} onClick={() => setShowTrajectory((value) => !value)}>⌁ 轨迹</button></div></div>
-          <SceneView config={config} frame={currentFrame} metadata={renderMetadata} runKey={selectedId || "preview"} showContacts={showContacts} showTrajectory={showTrajectory} geometryMode={geometryMode} cameraView={cameraView} onCameraViewChange={setCameraView} />
-          <Timeline frames={frames} currentIndex={currentIndex} status={status} speed={speed} onIndexChange={(index) => { followLiveRef.current = false; setCurrentIndex(index); }} onAction={(action) => void handleCommand(action)} onReset={() => { followLiveRef.current = false; setCurrentIndex(0); setIsPlaying(false); }} onSpeedChange={setSpeed} isPlaying={isPlaying} onTogglePlayback={() => setIsPlaying((value) => !value)} />
+          <div className="center-heading"><div><span className="eyebrow">{config.scenario === "stairs" ? "SCENARIO / STAIRS" : "SCENARIO / DROP"}</span><h1>{config.scenario === "stairs" ? "翻转下楼梯" : "悬挂下落"}<span className="model-pill">{config.numerics.profile === "fine" ? "FINE" : "PREVIEW"}</span></h1></div><div className="view-toggles"><button title="由真实帧位置与截面姿态插值的矩形带面" className={geometryMode === "smooth" ? "active" : ""} onClick={() => setGeometryMode("smooth")}>⌁ 彩虹带</button><button title="显示 MuJoCo 真实碰撞盒体" className={geometryMode === "boxes" ? "active" : ""} onClick={() => setGeometryMode("boxes")}>▦ 碰撞几何</button><button className={showContacts ? "active" : ""} onClick={() => setShowContacts((value) => !value)}>⊙ 接触点</button><button className={showTrajectory ? "active" : ""} onClick={() => setShowTrajectory((value) => !value)}>⌁ 轨迹</button><button title="沿质心平移相机，保持下落主体可见" className={followCamera ? "active" : ""} onClick={() => setFollowCamera((value) => !value)}>◎ 跟随质心</button></div></div>
+          <SceneView config={config} frame={currentFrame} metadata={renderMetadata} runKey={selectedId || "preview"} showContacts={showContacts} showTrajectory={showTrajectory} geometryMode={geometryMode} cameraView={cameraView} followCamera={followCamera} onCameraViewChange={setCameraView} />
+          <Timeline frames={frames} currentIndex={currentIndex} status={status} hasRun={Boolean(selectedId)} speed={speed} onIndexChange={(index) => { followLiveRef.current = false; setCurrentIndex(index); }} onAction={(action) => void handleCommand(action)} onReset={() => { followLiveRef.current = false; setCurrentIndex(0); setIsPlaying(false); }} onSpeedChange={setSpeed} isPlaying={isPlaying} onTogglePlayback={() => setIsPlaying((value) => !value)} />
           <ChartsPanel frames={frames} run={selectedRun} onUploadReference={uploadReferenceFile} onExportPng={(dataUrl) => saveDataUrl(dataUrl, "slinky-chart.png")} />
           <SweepPanel base={config} sweep={sweep} onStart={startSweep} />
         </section>
-        <RunHistory runs={runs} selectedId={selectedId} onSelect={(run) => void selectRun(run)} onExport={(name) => void exportArtifact(name)} />
+        <RunHistory runs={runs} selectedId={selectedId} selectedRun={selectedRun} onSelect={(run) => void selectRun(run)} onExport={(name) => void exportArtifact(name)} />
       </main>
 
-      <div className="statusbar"><div className="status-main"><span className={`status-dot status-${status}`} /><strong>{statusLabel}</strong>{progress !== undefined && ACTIVE_STATUSES.has(status) && <span className="progress-label">{Math.round(progress * 100)}%</span>}<span className="status-message">{error || (hasPhysicalResult ? "物理结果已加载，可拖动时间轴回放" : "调整参数后开始一次物理运行；当前为几何预览")}</span></div><div className="status-meta"><span>SI · Z-up</span><span>模型 v0.1</span></div></div>
+      <div className="statusbar"><div className="status-main"><span className={`status-dot status-${status}`} /><strong>{statusLabel}</strong>{progress !== undefined && ACTIVE_STATUSES.has(status) && <span className="progress-label">{Math.round(progress * 100)}%</span>}<span className="status-message">{error || (hasPhysicalResult ? "物理结果已加载，可拖动时间轴回放" : "调整参数后开始一次物理运行；当前为几何预览")}</span></div><div className="status-meta"><span>SI · Z-up</span><span data-testid="model-version">{modelVersionLabel}</span></div></div>
     </div>
   );
 }

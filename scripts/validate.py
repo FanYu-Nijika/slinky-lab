@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from slinky_lab import __version__
+from slinky_lab import MODEL_VERSION, __version__
 from slinky_lab.physics import Simulation
 from slinky_lab.schemas import RunConfig
 
@@ -67,7 +67,7 @@ def compare_events(baseline, refinement):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", default="docs/validation-results.json")
+    parser.add_argument("--output", default="reports/validation.json")
     parser.add_argument("--quick", action="store_true")
     args = parser.parse_args()
     config = RunConfig.model_validate({
@@ -77,10 +77,12 @@ def main():
         "numerics": {"duration": 0.18, "segments_per_turn": 8 if args.quick else 16,
                      "timestep": 0.000025 if args.quick else 0.0000125, "max_wall_seconds": 600},
     })
-    report = {"application_version": __version__, "created_at": datetime.now(timezone.utc).isoformat(),
+    report = {"application_version": __version__, "model_version": MODEL_VERSION,
+              "created_at": datetime.now(timezone.utc).isoformat(),
               "mode": "quick" if args.quick else "extended", "checks": {}}
     try:
         case, frames = run_case(config)
+        report["engine_version"] = case["metadata"]["engine_version"]
         report["baseline"] = case
         report["checks"]["held_native_equilibrium"] = {
             "passed": case["summary"]["prepare_status"] == "converged",

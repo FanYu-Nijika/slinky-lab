@@ -4,6 +4,7 @@ interface Props {
   frames: Frame[];
   currentIndex: number;
   status: RunStatus | string;
+  hasRun: boolean;
   speed: number;
   onIndexChange: (index: number) => void;
   onAction: (action: "pause" | "resume" | "step" | "cancel") => void;
@@ -13,9 +14,13 @@ interface Props {
   onTogglePlayback: () => void;
 }
 
-export function Timeline({ frames, currentIndex, status, speed, onIndexChange, onAction, onReset, onSpeedChange, isPlaying, onTogglePlayback }: Props) {
-  const playable = status === "running" || status === "paused" || status === "completed" || status === "failed" || status === "cancelled";
-  const playing = isPlaying || status === "running";
+export function Timeline({ frames, currentIndex, status, hasRun, speed, onIndexChange, onAction, onReset, onSpeedChange, isPlaying, onTogglePlayback }: Props) {
+  const computing = hasRun && (status === "queued" || status === "preparing" || status === "running");
+  const playable = hasRun && (computing || status === "paused" || status === "completed" || status === "failed" || status === "cancelled");
+  const playing = isPlaying || computing;
+  const cancellable = computing || status === "paused";
+  const preparationStep = status === "paused" && frames.length === 0;
+  const terminal = status === "completed" || status === "failed" || status === "cancelled";
   const current = frames[currentIndex];
   return (
     <div className="timeline-card" data-testid="timeline">
@@ -27,8 +32,8 @@ export function Timeline({ frames, currentIndex, status, speed, onIndexChange, o
       <div className="timeline-controls">
         <button className="square-button" title="重置" onClick={onReset}>↺</button>
         <button className="play-button" disabled={!playable} onClick={() => { if (status === "completed" || status === "failed" || status === "cancelled") onTogglePlayback(); else onAction(playing ? "pause" : "resume"); }}><span>{playing ? "Ⅱ" : "▶"}</span>{playing ? "暂停" : "开始"}</button>
-        <button className="square-button" disabled={!playable || playing} title="单步" onClick={() => onAction("step")}>›</button>
-        <button className="square-button danger" disabled={!playable || status === "completed" || status === "cancelled"} title="取消" onClick={() => onAction("cancel")}>×</button>
+        <button className="square-button" disabled={!playable || playing || (terminal && !frames.length)} title={terminal ? "回放单步" : preparationStep ? "完成准备并停在首帧" : "单步"} onClick={() => terminal ? onIndexChange(Math.min(currentIndex + 1, Math.max(frames.length - 1, 0))) : onAction("step")}>›</button>
+        <button className="square-button danger" disabled={!cancellable} title="取消" onClick={() => onAction("cancel")}>×</button>
         <div className="speed-control"><span>播放</span>{[0.25, 0.5, 1, 2].map((value) => <button key={value} className={speed === value ? "active" : ""} onClick={() => onSpeedChange(value)}>{value}×</button>)}</div>
       </div>
     </div>

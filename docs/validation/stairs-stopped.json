@@ -1,0 +1,666 @@
+{
+  "config": {
+    "schema_version": 1,
+    "name": "stairs stopped launch diagnostic",
+    "scenario": "stairs",
+    "material": {
+      "turns": 3,
+      "radius": 0.03,
+      "strip_width": 0.006,
+      "strip_thickness": 0.0045,
+      "pitch": 0.0055,
+      "mass": 0.012,
+      "young_modulus": 20000000.0,
+      "shear_modulus": 7407407.407407407,
+      "damping": 0.002,
+      "friction": 0.8,
+      "self_friction": 0.05
+    },
+    "scene": {
+      "gravity": 9.81,
+      "step_height": 0.04,
+      "step_depth": 0.12,
+      "step_width": 0.3,
+      "step_count": 6,
+      "tilt_deg": 0.0,
+      "initial_angular_velocity": 0.0,
+      "initial_forward_velocity": 0.0,
+      "initial_lateral_velocity": 0.0,
+      "launch_offset": -0.015,
+      "settle_time": 0.05
+    },
+    "numerics": {
+      "profile": "fine",
+      "duration": 0.8,
+      "sample_hz": 50,
+      "segments_per_turn": 8,
+      "timestep": 5e-05,
+      "max_wall_seconds": 90.0,
+      "contact_time_constant": 0.0005
+    },
+    "provenance": {
+      "experiment": "reports/stairs-stopped",
+      "calibration": "bounded no-launch stop observation; no threshold changes or runtime driving"
+    }
+  },
+  "model_version": "helical-box-cable-v3",
+  "engine_version": "3.15.0",
+  "run_report": {
+    "status": "completed",
+    "error": null,
+    "elapsed_wall_seconds": 6.967999999993481,
+    "wall_limit_seconds": 90.0,
+    "warning_detected": false,
+    "native_warning_lines": [],
+    "native_log_paths": [],
+    "python_warnings": [],
+    "sampled_frame_count": 41,
+    "top_tread_stair_0_sampled_contact": {
+      "stair_step": 0,
+      "surface": "tread",
+      "classification": "sampled contact observations; frame sampling cannot prove uninterrupted support",
+      "sampled_frame_count": 39,
+      "first_sampled_time": 0.04000000000000063,
+      "last_sampled_time": 0.8,
+      "max_total_normal_force_n": 0.16945677334234424,
+      "max_contact_normal_force_n": 0.10486336209832975,
+      "observations": [
+        {
+          "time": 0.04000000000000063,
+          "contact_count": 1,
+          "material_indices": [
+            0
+          ],
+          "total_normal_force_n": 0.10486336209832975,
+          "peak_normal_force_n": 0.10486336209832975
+        },
+        {
+          "time": 0.060000000000001205,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            5
+          ],
+          "total_normal_force_n": 0.03827123933114563,
+          "peak_normal_force_n": 0.02841596521375734
+        },
+        {
+          "time": 0.07999999999999935,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            3
+          ],
+          "total_normal_force_n": 0.16945677334234424,
+          "peak_normal_force_n": 0.08783213505908014
+        },
+        {
+          "time": 0.09999999999999715,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.06366694234632506,
+          "peak_normal_force_n": 0.04733110465010482
+        },
+        {
+          "time": 0.11999999999999494,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.13956001052595252,
+          "peak_normal_force_n": 0.08142486089544966
+        },
+        {
+          "time": 0.13999999999999274,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.07895252568653047,
+          "peak_normal_force_n": 0.04867206304453192
+        },
+        {
+          "time": 0.15999999999999054,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.08935062428163677,
+          "peak_normal_force_n": 0.057126103615447704
+        },
+        {
+          "time": 0.17999999999998834,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.13226060936972325,
+          "peak_normal_force_n": 0.07760003233101691
+        },
+        {
+          "time": 0.19999999999998613,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.12543420153457466,
+          "peak_normal_force_n": 0.07214729104450583
+        },
+        {
+          "time": 0.21999999999998393,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.11453619489221417,
+          "peak_normal_force_n": 0.07125814757306854
+        },
+        {
+          "time": 0.23999999999998173,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.11491077563777444,
+          "peak_normal_force_n": 0.06318841179949078
+        },
+        {
+          "time": 0.2599999999999795,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.1221220201042627,
+          "peak_normal_force_n": 0.07440308833508245
+        },
+        {
+          "time": 0.2799999999999773,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.12227769664275626,
+          "peak_normal_force_n": 0.06534837359539059
+        },
+        {
+          "time": 0.2999999999999751,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.1235911174304791,
+          "peak_normal_force_n": 0.0678792483491784
+        },
+        {
+          "time": 0.3199999999999729,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.08720787085224138,
+          "peak_normal_force_n": 0.05360594451245965
+        },
+        {
+          "time": 0.3399999999999707,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.13961101283740499,
+          "peak_normal_force_n": 0.08190448339484294
+        },
+        {
+          "time": 0.3599999999999685,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.1571105228907867,
+          "peak_normal_force_n": 0.08109285658214847
+        },
+        {
+          "time": 0.3799999999999663,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.10609577038071315,
+          "peak_normal_force_n": 0.04960912705374725
+        },
+        {
+          "time": 0.3999999999999641,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.14638478312606595,
+          "peak_normal_force_n": 0.08289774655764978
+        },
+        {
+          "time": 0.4199999999999619,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.13485041898868627,
+          "peak_normal_force_n": 0.07214541319850404
+        },
+        {
+          "time": 0.4399999999999597,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.12377578212890285,
+          "peak_normal_force_n": 0.06272708188333515
+        },
+        {
+          "time": 0.4599999999999575,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.1344449422794421,
+          "peak_normal_force_n": 0.08641264271450091
+        },
+        {
+          "time": 0.4799999999999553,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.07882210313702777,
+          "peak_normal_force_n": 0.05051609848871992
+        },
+        {
+          "time": 0.4999999999999531,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.07589874946197868,
+          "peak_normal_force_n": 0.04900352629727104
+        },
+        {
+          "time": 0.519999999999951,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.12721352235076577,
+          "peak_normal_force_n": 0.07525047277507295
+        },
+        {
+          "time": 0.5399999999999487,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.14414005791988804,
+          "peak_normal_force_n": 0.0838342514227123
+        },
+        {
+          "time": 0.5599999999999465,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.15380492850408117,
+          "peak_normal_force_n": 0.08018997672055272
+        },
+        {
+          "time": 0.5799999999999443,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.09792108860634748,
+          "peak_normal_force_n": 0.051621779118454
+        },
+        {
+          "time": 0.5999999999999421,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.1442575216461544,
+          "peak_normal_force_n": 0.08156376614318597
+        },
+        {
+          "time": 0.6199999999999399,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.10379175523945602,
+          "peak_normal_force_n": 0.0539895285731945
+        },
+        {
+          "time": 0.6399999999999377,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.15724487467529272,
+          "peak_normal_force_n": 0.08419980441830686
+        },
+        {
+          "time": 0.6599999999999355,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.08735198519079498,
+          "peak_normal_force_n": 0.04605342306512554
+        },
+        {
+          "time": 0.6799999999999333,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.14615695845374238,
+          "peak_normal_force_n": 0.08379872281805535
+        },
+        {
+          "time": 0.6999999999999311,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.13159792176441004,
+          "peak_normal_force_n": 0.06490760807576955
+        },
+        {
+          "time": 0.7199999999999289,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.11355309153976044,
+          "peak_normal_force_n": 0.06661648326881603
+        },
+        {
+          "time": 0.7399999999999267,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.10326257331259044,
+          "peak_normal_force_n": 0.06401917244952879
+        },
+        {
+          "time": 0.7599999999999245,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.115264452644287,
+          "peak_normal_force_n": 0.06077282284484487
+        },
+        {
+          "time": 0.7799999999999223,
+          "contact_count": 3,
+          "material_indices": [
+            0,
+            3,
+            4
+          ],
+          "total_normal_force_n": 0.12038936918680544,
+          "peak_normal_force_n": 0.07625938243584333
+        },
+        {
+          "time": 0.8,
+          "contact_count": 2,
+          "material_indices": [
+            0,
+            4
+          ],
+          "total_normal_force_n": 0.1443166748450484,
+          "peak_normal_force_n": 0.07710743594762963
+        }
+      ]
+    },
+    "simulation_summary": {
+      "status": "complete",
+      "scenario": "stairs",
+      "prepared": true,
+      "released": true,
+      "time": 0.8,
+      "duration": 0.8,
+      "dt": 5e-05,
+      "steps": 16000,
+      "segment_count": 24,
+      "mass": {
+        "configured_kg": 0.012,
+        "model_kg": 0.012,
+        "error_kg": 0.0
+      },
+      "metrics": {
+        "top_z": 0.25596956494328,
+        "bottom_z": 0.24237745680738215,
+        "spatial_top_z": 0.2582712163283382,
+        "spatial_bottom_z": 0.23999791762954964,
+        "material_top_z": 0.25596956494328,
+        "material_bottom_z": 0.24237745680738215,
+        "material_first_z": 0.24237745680738215,
+        "material_last_z": 0.25596956494328,
+        "material_vertical_span": 0.01359210813589784,
+        "com_x": 0.04477779133257083,
+        "com_y": -0.00026717614367892845,
+        "com_z": 0.2479347587722813,
+        "com_vx": 0.00022450806098371675,
+        "com_vy": -0.00018399316459984908,
+        "com_vz": -0.00015763648205725192,
+        "kinetic_energy": 4.6857166652911155e-08,
+        "gravitational_energy": 0.029186879802672958,
+        "elastic_energy_estimate": 1.3761219413349873e-05,
+        "cable_work": -5.809108074823943e-06,
+        "damping_work": -0.0005103848885141876,
+        "contact_work": -9.375381687574488e-06,
+        "steps_descended": 0.0,
+        "max_penetration": 6.477492349862807e-05,
+        "nonadjacent_self_contacts": 118869.0,
+        "stair_contact_events": 37597.0,
+        "max_nonadjacent_self_contacts": 16.0,
+        "max_stair_contacts": 5.0,
+        "confirmed_flip_count": 0.0
+      },
+      "top_z": 0.25596956494328,
+      "bottom_z": 0.24237745680738215,
+      "spatial_top_z": 0.2582712163283382,
+      "spatial_bottom_z": 0.23999791762954964,
+      "material_top_z": 0.25596956494328,
+      "material_bottom_z": 0.24237745680738215,
+      "material_first_z": 0.24237745680738215,
+      "material_last_z": 0.25596956494328,
+      "material_vertical_span": 0.01359210813589784,
+      "com_x": 0.04477779133257083,
+      "com_y": -0.00026717614367892845,
+      "com_z": 0.2479347587722813,
+      "com_vx": 0.00022450806098371675,
+      "com_vy": -0.00018399316459984908,
+      "com_vz": -0.00015763648205725192,
+      "kinetic_energy": 4.6857166652911155e-08,
+      "gravitational_energy": 0.029186879802672958,
+      "elastic_energy_estimate": 1.3761219413349873e-05,
+      "cable_work": -5.809108074823943e-06,
+      "damping_work": -0.0005103848885141876,
+      "contact_work": -9.375381687574488e-06,
+      "steps_descended": 0.0,
+      "max_penetration": 6.477492349862807e-05,
+      "nonadjacent_self_contacts": 118869.0,
+      "stair_contact_events": 37597.0,
+      "max_nonadjacent_self_contacts": 16.0,
+      "max_stair_contacts": 5.0,
+      "confirmed_flip_count": 0.0,
+      "prepare_status": "not_applicable",
+      "settle_speed": 0.0,
+      "settle_damping": 0.0,
+      "settle_steps": 0,
+      "initial_guess_used": false,
+      "static_solve": {
+        "status": "not_run"
+      },
+      "settle_simulated_seconds": 0.0,
+      "settle_residual_acceleration": null,
+      "settle_force_residual": null,
+      "settle_anchor_error_m": null,
+      "settle_thresholds": {
+        "equivalent_speed_m_s": 0.002,
+        "relative_force_residual": 0.01,
+        "anchor_error_m": 0.0002
+      },
+      "settle_damping_note": "temporary inertia-scaled relaxation damping; physical damping restored before release, residual measured while held",
+      "freefall_check": {
+        "samples": 0,
+        "max_height_error": null,
+        "release_com_z": null,
+        "release_com_vz": null,
+        "status": "not_observed"
+      },
+      "energy_diagnostics": {
+        "approximate": true,
+        "d_energy_includes_cable_elastic": false,
+        "elastic_energy_estimate": 1.3761219413349873e-05,
+        "elastic_energy_definition": "plugin rotation-vector difference and rectangular Saint-Venant J, Iy, Iz; diagnostic only",
+        "elastic_energy_gradient_check": "small joint rotation differs from plugin torque by about 11%; do not treat as an exact potential",
+        "cable_work_definition": "signed integral of qfrc_passive dot qvel after removing known joint damping",
+        "damping_work_definition": "signed integral of -sum(dof_damping * qvel^2)",
+        "contact_work_definition": "constraint generalized power; includes solver work and is diagnostic"
+      },
+      "contact_diagnostics": {
+        "nonadjacent_self_contact_events": 118869,
+        "stair_contact_events": 37597,
+        "max_nonadjacent_self_contacts_per_step": 16,
+        "max_stair_contacts_per_step": 5,
+        "steps_descended_definition": "highest lower stair index reached by an observed cable/stair contact; COM crossing alone is not counted"
+      },
+      "static_equilibrium_length": 0.016499999999961268,
+      "bottom_onset_time": null,
+      "collapse_time": null,
+      "step_events": [],
+      "movement_classification": "stopped",
+      "support_diagnostics": {
+        "weight_n": 0.11772,
+        "support_fraction": 0.1,
+        "support_threshold_n": 0.011772000000000001,
+        "dwell_s": 0.02,
+        "simultaneous_window_s": 0.001,
+        "last_time": 0.8,
+        "events": [],
+        "verified_steps": [],
+        "candidate_flip_count": 0,
+        "candidate_endpoint_sequence": [],
+        "confirmed_flip_count": 0,
+        "confirmed_endpoint_sequence": []
+      },
+      "quiet_duration_s": 0.6602499999999355,
+      "research_metric_definitions": {
+        "static_equilibrium_length": "vertical distance between material endpoints immediately before release or after stairs placement",
+        "bottom_onset_time": "first post-release time when the material lower endpoint moves beyond max(0.5 mm, 0.5% initial vertical span)",
+        "collapse_time": "first post-release time with endpoint vertical span <= 1.05 * turns * strip_thickness, only when initial span exceeds this threshold",
+        "step_events": "new lower stair indices reached by cable/stair contact, with endpoint class from material-order end regions"
+      }
+    },
+    "quiet_duration_s": 0.6602499999999355,
+    "movement_classification": "stopped",
+    "max_penetration": 6.477492349862807e-05,
+    "config": {
+      "schema_version": 1,
+      "name": "stairs stopped launch diagnostic",
+      "scenario": "stairs",
+      "material": {
+        "turns": 3,
+        "radius": 0.03,
+        "strip_width": 0.006,
+        "strip_thickness": 0.0045,
+        "pitch": 0.0055,
+        "mass": 0.012,
+        "young_modulus": 20000000.0,
+        "shear_modulus": 7407407.407407407,
+        "damping": 0.002,
+        "friction": 0.8,
+        "self_friction": 0.05
+      },
+      "scene": {
+        "gravity": 9.81,
+        "step_height": 0.04,
+        "step_depth": 0.12,
+        "step_width": 0.3,
+        "step_count": 6,
+        "tilt_deg": 0.0,
+        "initial_angular_velocity": 0.0,
+        "initial_forward_velocity": 0.0,
+        "initial_lateral_velocity": 0.0,
+        "launch_offset": -0.015,
+        "settle_time": 0.05
+      },
+      "numerics": {
+        "profile": "fine",
+        "duration": 0.8,
+        "sample_hz": 50,
+        "segments_per_turn": 8,
+        "timestep": 5e-05,
+        "max_wall_seconds": 90.0,
+        "contact_time_constant": 0.0005
+      },
+      "provenance": {
+        "experiment": "reports/stairs-stopped",
+        "calibration": "bounded no-launch stop observation; no threshold changes or runtime driving"
+      }
+    }
+  }
+}

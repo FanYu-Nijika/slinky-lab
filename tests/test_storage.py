@@ -1,10 +1,96 @@
 import json
+import multiprocessing as mp
+import queue
+import time
 from pathlib import Path
+from typing import Any
 
 import h5py
 
 from slinky_lab.schemas import Frame, RunConfig
 from slinky_lab.storage import DataStore, TrajectoryWriter, read_frames
+
+
+def _make_process_frame(frame_index: int, contact_count: int) -> Frame:
+    contacts = [[float(index), float(frame_index), 0.0] for index in range(contact_count)]
+    details = [
+        {
+            "position": [float(index), float(frame_index), 0.0],
+            "geom_a": index,
+            "geom_b": index + 1,
+            "normal_force": float(index + 1),
+            "kind": ("self", "stair", "external")[index % 3],
+            "stair_step": frame_index if index % 3 == 1 else None,
+            "material_index": index,
+            "surface": "tread" if index % 2 else "other",
+        }
+        for index in range(contact_count)
+    ]
+    return Frame(
+        time=frame_index * 0.01,
+        positions=[[0.0, 0.0, 0.5]],
+        quaternions=[[1.0, 0.0, 0.0, 0.0]],
+        contacts=contacts,
+        contact_details=details,
+        metrics={"frame_index": float(frame_index)},
+    )
+
+
+def _cross_process_writer(path: str, started: Any, reader_first_read: Any, finished: Any, errors: Any) -> None:
+    writer = None
+    try:
+        writer = TrajectoryWriter(path)
+        counts = (0, 5, 12, 3, 24, 7, 31, 2, 40, 1, 18, 35)
+        for frame_index, contact_count in enumerate(counts):
+            writer.append(_make_process_frame(frame_index, contact_count))
+            if frame_index == 0:
+                started.set()
+                if not reader_first_read.wait(15):
+                    raise AssertionError("reader did not consume the first committed frame")
+            time.sleep(0.01)
+    except BaseException as exc:
+        errors.put(f"writer: {type(exc).__name__}: {exc}")
+    finally:
+        if writer is not None:
+            try:
+                writer.close()
+            except BaseException as exc:
+                errors.put(f"writer close: {type(exc).__name__}: {exc}")
+        finished.set()
+
+
+def _cross_process_reader(
+    path: str, reader_ready: Any, started: Any, first_read: Any, finished: Any, observations: Any, errors: Any
+) -> None:
+    reader_ready.set()
+    if not started.wait(15):
+        errors.put("reader: writer did not publish the first frame")
+        return
+    previous_total = 0
+    reads = 0
+    max_contacts = 0
+    deadline = time.monotonic() + 30
+    try:
+        while True:
+            frames, total = read_frames(path, limit=None)
+            reads += 1
+            if total != len(frames):
+                raise AssertionError(f"committed total {total} differs from returned frames {len(frames)}")
+            if total < previous_total:
+                raise AssertionError(f"reader observed total regression {previous_total} -> {total}")
+            previous_total = total
+            if frames:
+                max_contacts = max(max_contacts, len(frames[-1]["contacts"]))
+            if reads == 1:
+                first_read.set()
+            if finished.is_set():
+                break
+            if time.monotonic() >= deadline:
+                raise AssertionError("reader timed out while writer was active")
+            time.sleep(0.003)
+        observations.put({"reads": reads, "total": previous_total, "max_contacts": max_contacts})
+    except BaseException as exc:
+        errors.put(f"reader: {type(exc).__name__}: {exc}")
 
 
 def test_run_index_and_recovery(tmp_path: Path):
@@ -182,3 +268,55 @@ def test_read_handwritten_v2_with_contact_details(tmp_path: Path):
     frames, total = read_frames(path, limit=None)
     assert total == 1
     assert frames[0]["contact_details"] == [detail]
+
+
+def test_cross_process_writer_reader_growable_contacts(tmp_path: Path):
+    path = tmp_path / "cross-process.h5"
+    context = mp.get_context("spawn")
+    reader_ready = context.Event()
+    started = context.Event()
+    first_read = context.Event()
+    finished = context.Event()
+    errors = context.Queue()
+    observations = context.Queue()
+    writer = context.Process(target=_cross_process_writer, args=(str(path), started, first_read, finished, errors))
+    reader = context.Process(target=_cross_process_reader, args=(str(path), reader_ready, started, first_read, finished, observations, errors))
+    try:
+        reader.start()
+        assert reader_ready.wait(15)
+        writer.start()
+        assert started.wait(15)
+        writer.join(60)
+        reader.join(60)
+        if writer.is_alive():
+            writer.terminate()
+            writer.join(5)
+        if reader.is_alive():
+            reader.terminate()
+            reader.join(5)
+        failures = []
+        while True:
+            try:
+                failures.append(errors.get_nowait())
+            except queue.Empty:
+                break
+        assert writer.exitcode == 0, failures
+        assert reader.exitcode == 0, failures
+        assert not failures
+        observation = observations.get(timeout=5)
+        assert observation["reads"] >= 2
+        assert observation["total"] == 12
+        assert observation["max_contacts"] > 30
+        frames, total = read_frames(path, limit=None)
+        assert total == 12
+        assert len(frames) == 12
+        assert len(frames[8]["contacts"]) == 40
+        assert len(frames[8]["contact_details"]) == 40
+        assert path.with_name(path.name + ".lock").is_file()
+    finally:
+        if writer.is_alive():
+            writer.terminate()
+            writer.join(5)
+        if reader.is_alive():
+            reader.terminate()
+            reader.join(5)

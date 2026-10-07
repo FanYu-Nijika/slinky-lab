@@ -8,6 +8,7 @@ the CI runtime short enough for a regular pull request.
 from __future__ import annotations
 
 import queue
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -102,11 +103,30 @@ def test_two_queued_runs_pause_step_resume_cancel(tmp_path: Path):
         manager.command(second["run_id"], "step")
         deadline = time.monotonic() + 10
         stepped = paused
+        first_frame_seen = False
         while time.monotonic() < deadline:
             stepped = manager.get_run(second["run_id"]) or stepped
+            try:
+                first_frame_seen = manager.frames(second["run_id"], 0, 2)["total"] > 0
+            except OSError:
+                first_frame_seen = False
             if stepped["status"] == "paused" and stepped["time"] > 0:
                 break
+            if stepped["status"] == "paused" and stepped["time"] == 0 and first_frame_seen:
+                break
             time.sleep(0.02)
+        assert stepped["status"] == "paused" and first_frame_seen, stepped
+        if stepped["time"] == 0:
+            # The first step may be consumed while the worker is still in
+            # preparation.  It publishes the initial frame and pauses; a
+            # second step is required to advance released simulation time.
+            manager.command(second["run_id"], "step")
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                stepped = manager.get_run(second["run_id"]) or stepped
+                if stepped["status"] == "paused" and stepped["time"] > 0:
+                    break
+                time.sleep(0.02)
         assert stepped["status"] == "paused" and stepped["time"] > 0, stepped
 
         manager.command(second["run_id"], "resume")
@@ -132,6 +152,221 @@ class TimeoutSimulation:
     def prepare(self, progress: Any = None, should_cancel: Any = None) -> None:
         assert should_cancel is not None
         assert should_cancel()
+
+
+class PreparationControlSimulation:
+    """Small fake whose prepare callback gives the worker control tests time."""
+
+    entered = threading.Event()
+    last_instance: "PreparationControlSimulation | None" = None
+
+    def __init__(self, _config: RunConfig):
+        type(self).last_instance = self
+        self.time = 0.0
+        self.steps = 0
+        self.model_xml = "<mujoco/>"
+
+    @classmethod
+    def reset(cls) -> None:
+        cls.entered = threading.Event()
+        cls.last_instance = None
+
+    def prepare(self, progress: Any = None, should_cancel: Any = None) -> None:
+        type(self).entered.set()
+        for index in range(50):
+            if progress is not None:
+                progress(index / 50)
+            if should_cancel is not None and should_cancel():
+                return
+            time.sleep(0.005)
+
+    def metadata(self) -> dict[str, Any]:
+        return {"engine_version": "test"}
+
+    def frame(self) -> Frame:
+        return frame_at(self.time, float(self.steps))
+
+    def step(self) -> None:
+        self.steps += 1
+        self.time += 0.01
+
+    def summary(self) -> dict[str, Any]:
+        return {"steps": self.steps, "time": self.time}
+
+
+def start_thread_worker(manager: RunManager, run: dict[str, Any], config: RunConfig) -> tuple[threading.Thread, queue.Queue, queue.Queue]:
+    controls: queue.Queue[dict[str, Any]] = queue.Queue()
+    events: queue.Queue[dict[str, Any]] = queue.Queue()
+    worker = threading.Thread(
+        target=_worker_run,
+        args=({"run_id": run["run_id"], "config": config.model_dump(mode="json")}, controls, events, str(manager.store.root)),
+        daemon=True,
+    )
+    worker.start()
+    return worker, controls, events
+
+
+def wait_for_worker_event(events: queue.Queue, predicate: Any, timeout: float = 10) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            event = events.get(timeout=0.1)
+        except queue.Empty:
+            continue
+        if predicate(event):
+            return event
+    raise AssertionError("timed out waiting for worker event")
+
+
+def test_pause_during_prepare_excludes_pause_wall_time(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    manager = RunManager(tmp_path, auto_start=False, recover=False)
+    manager.start = lambda: None
+    PreparationControlSimulation.reset()
+    monkeypatch.setattr(manager_module, "_simulation_class", lambda: PreparationControlSimulation)
+    config = tiny_config(duration=0.02, max_wall_seconds=5)
+    run = manager.create_run(config)
+    worker, controls, events = start_thread_worker(manager, run, config)
+    try:
+        assert PreparationControlSimulation.entered.wait(5)
+        controls.put({"run_id": run["run_id"], "action": "pause"})
+        paused = wait_for_worker_event(events, lambda event: event.get("kind") == "status" and event.get("status") == "paused")
+        assert paused["time"] == 0
+        # The active preparation work is shorter than the five-second budget,
+        # but the wall pause is longer.  It must not turn into a timeout.
+        time.sleep(5.2)
+        assert worker.is_alive()
+        controls.put({"run_id": run["run_id"], "action": "resume"})
+        worker.join(10)
+        assert not worker.is_alive()
+        result = wait_for_worker_event(events, lambda event: event.get("kind") == "result", timeout=2)
+        assert result["status"] == "completed"
+    finally:
+        if worker.is_alive():
+            controls.put({"run_id": run["run_id"], "action": "cancel"})
+            worker.join(5)
+        manager.shutdown()
+
+
+def test_step_during_prepare_stops_at_first_frame(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    manager = RunManager(tmp_path, auto_start=False, recover=False)
+    manager.start = lambda: None
+    PreparationControlSimulation.reset()
+    monkeypatch.setattr(manager_module, "_simulation_class", lambda: PreparationControlSimulation)
+    config = tiny_config(duration=0.02, max_wall_seconds=5)
+    run = manager.create_run(config)
+    worker, controls, events = start_thread_worker(manager, run, config)
+    try:
+        assert PreparationControlSimulation.entered.wait(5)
+        controls.put({"run_id": run["run_id"], "action": "pause"})
+        wait_for_worker_event(events, lambda event: event.get("kind") == "status" and event.get("status") == "paused")
+        controls.put({"run_id": run["run_id"], "action": "step"})
+        first_frame = wait_for_worker_event(events, lambda event: event.get("kind") == "frame")
+        assert first_frame["frame"]["time"] == 0
+        second_pause = wait_for_worker_event(
+            events, lambda event: event.get("kind") == "status" and event.get("status") == "paused", timeout=5
+        )
+        assert second_pause["time"] == 0
+        assert PreparationControlSimulation.last_instance is not None
+        assert PreparationControlSimulation.last_instance.steps == 0
+        controls.put({"run_id": run["run_id"], "action": "resume"})
+        worker.join(10)
+        assert not worker.is_alive()
+        assert PreparationControlSimulation.last_instance.steps > 0
+    finally:
+        if worker.is_alive():
+            controls.put({"run_id": run["run_id"], "action": "cancel"})
+            worker.join(5)
+        manager.shutdown()
+
+
+def test_resume_during_prepare_is_not_replaced_by_stale_paused_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    manager = RunManager(tmp_path, auto_start=False, recover=False)
+    manager.start = lambda: None
+    PreparationControlSimulation.reset()
+    monkeypatch.setattr(manager_module, "_simulation_class", lambda: PreparationControlSimulation)
+    config = tiny_config(duration=0.02, max_wall_seconds=5)
+    run = manager.create_run(config)
+    manager.store.update_run(run["run_id"], status="paused")
+    manager._active_run_id = run["run_id"]
+    worker, controls, events = start_thread_worker(manager, run, config)
+    manager.controls = controls
+    try:
+        assert PreparationControlSimulation.entered.wait(5)
+        wait_for_worker_event(events, lambda event: event.get("kind") == "status" and event.get("status") == "paused")
+        manager.command(run["run_id"], "resume")
+        worker.join(10)
+        assert not worker.is_alive()
+        result = wait_for_worker_event(events, lambda event: event.get("kind") == "result", timeout=2)
+        assert result["status"] == "completed"
+        assert not any(event.get("kind") == "status" and event.get("status") == "paused" and event.get("time") == 0
+                       for event in list(events.queue))
+    finally:
+        if worker.is_alive():
+            manager.command(run["run_id"], "cancel")
+            worker.join(5)
+        manager.shutdown()
+
+
+def test_resume_after_prepare_step_clears_pause_intent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    manager = RunManager(tmp_path, auto_start=False, recover=False)
+    manager.start = lambda: None
+    PreparationControlSimulation.reset()
+    monkeypatch.setattr(manager_module, "_simulation_class", lambda: PreparationControlSimulation)
+    config = tiny_config(duration=0.02, max_wall_seconds=5)
+    run = manager.create_run(config)
+    worker, controls, events = start_thread_worker(manager, run, config)
+    try:
+        assert PreparationControlSimulation.entered.wait(5)
+        controls.put({"run_id": run["run_id"], "action": "pause"})
+        wait_for_worker_event(events, lambda event: event.get("kind") == "status" and event.get("status") == "paused")
+        # Queue both commands before the preparation callback gets another
+        # poll.  Resume is the newer intent and must clear both step flags.
+        controls.put({"run_id": run["run_id"], "action": "step"})
+        controls.put({"run_id": run["run_id"], "action": "resume"})
+        worker.join(10)
+        assert not worker.is_alive()
+        result = wait_for_worker_event(events, lambda event: event.get("kind") == "result", timeout=2)
+        assert result["status"] == "completed"
+        assert PreparationControlSimulation.last_instance is not None
+        assert PreparationControlSimulation.last_instance.steps > 0
+        assert not any(event.get("kind") == "status" and event.get("status") == "paused" and event.get("time") == 0
+                       for event in list(events.queue))
+    finally:
+        if worker.is_alive():
+            controls.put({"run_id": run["run_id"], "action": "cancel"})
+            worker.join(5)
+        manager.shutdown()
+
+
+def test_cancel_during_prepare_interrupts_without_release(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    manager = RunManager(tmp_path, auto_start=False, recover=False)
+    manager.start = lambda: None
+    PreparationControlSimulation.reset()
+    monkeypatch.setattr(manager_module, "_simulation_class", lambda: PreparationControlSimulation)
+    config = tiny_config(duration=0.02, max_wall_seconds=5)
+    run = manager.create_run(config)
+    worker, controls, events = start_thread_worker(manager, run, config)
+    try:
+        assert PreparationControlSimulation.entered.wait(5)
+        controls.put({"run_id": run["run_id"], "action": "cancel"})
+        cancelled = wait_for_worker_event(events, lambda event: event.get("kind") == "status" and event.get("status") == "cancelled")
+        assert cancelled["time"] == 0
+        worker.join(5)
+        assert not worker.is_alive()
+        assert PreparationControlSimulation.last_instance is not None
+        assert PreparationControlSimulation.last_instance.steps == 0
+        remaining: list[dict[str, Any]] = []
+        while True:
+            try:
+                remaining.append(events.get_nowait())
+            except queue.Empty:
+                break
+        assert not any(event.get("kind") == "result" for event in remaining)
+    finally:
+        if worker.is_alive():
+            controls.put({"run_id": run["run_id"], "action": "cancel"})
+            worker.join(5)
+        manager.shutdown()
 
 
 def run_direct_worker(manager: RunManager, run_id: str, config: RunConfig) -> list[dict[str, Any]]:

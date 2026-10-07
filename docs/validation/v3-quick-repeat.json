@@ -1,0 +1,1020 @@
+{
+  "application_version": "0.1.0",
+  "created_at": "2026-10-07T05:23:05.145961+00:00",
+  "mode": "quick",
+  "checks": {
+    "held_native_equilibrium": {
+      "passed": true,
+      "relative_force_residual": 0.0,
+      "anchor_error_m": 1.8184398624110365e-06
+    },
+    "center_of_mass_freefall": {
+      "max_absolute_error_m": 0.00033061946804481546,
+      "relative_error": 0.0024263222647893453,
+      "passed": true
+    },
+    "work_balance": {
+      "kinetic_and_gravity_change_J": 0.0005686669543789012,
+      "total_work_J": 0.0006567384476927917,
+      "residual_J": -8.80714933138905e-05,
+      "note": "Power integral diagnostic, not an assertion that contact/friction conserves mechanical energy."
+    },
+    "half_timestep_trajectory": {
+      "max_absolute_error_m": 0.003411492430070759,
+      "note": "Trajectory diagnostic; this does not certify collapse-time or experimental agreement."
+    },
+    "half_timestep_events": {
+      "bottom_onset_time": {
+        "passed": true,
+        "relative_change": 0.002953874119555265,
+        "baseline_s": 0.055174999999998,
+        "refined_s": 0.05501249999999598
+      },
+      "collapse_time": {
+        "passed": true,
+        "relative_change": 0.003499079189671946,
+        "baseline_s": 0.13527499999998918,
+        "refined_s": 0.1357499999999871
+      }
+    },
+    "experimental_validation": {
+      "status": "not_established_by_this_check"
+    }
+  },
+  "baseline": {
+    "config": {
+      "schema_version": 1,
+      "name": "质心和时间步长检查",
+      "scenario": "drop",
+      "material": {
+        "turns": 3,
+        "radius": 0.03,
+        "strip_width": 0.003,
+        "strip_thickness": 0.0015,
+        "pitch": 0.002,
+        "mass": 0.012,
+        "young_modulus": 100000000.0,
+        "shear_modulus": 37037037.03703704,
+        "damping": 1e-05,
+        "friction": 0.5,
+        "self_friction": 0.5
+      },
+      "scene": {
+        "gravity": 9.81,
+        "step_height": 0.04,
+        "step_depth": 0.08,
+        "step_width": 0.3,
+        "step_count": 6,
+        "tilt_deg": 25,
+        "initial_angular_velocity": 0,
+        "initial_forward_velocity": 0,
+        "initial_lateral_velocity": 0,
+        "launch_offset": 0,
+        "settle_time": 2.0
+      },
+      "numerics": {
+        "profile": "preview",
+        "duration": 0.18,
+        "sample_hz": 60,
+        "segments_per_turn": 8,
+        "timestep": 2.5e-05,
+        "max_wall_seconds": 600.0,
+        "contact_time_constant": 0.003
+      },
+      "provenance": {
+        "preset": "illustrative: not experimentally calibrated"
+      }
+    },
+    "metadata": {
+      "schema_version": 1,
+      "model_version": "helical-box-cable-v3",
+      "engine_version": "3.15.0",
+      "mujoco_version": "3.15.0",
+      "units": {
+        "length": "m",
+        "mass": "kg",
+        "time": "s",
+        "force": "N",
+        "energy": "J",
+        "stiffness": "Pa"
+      },
+      "coordinate_system": {
+        "world_up": "+z",
+        "stairs_direction": "+x",
+        "quaternion": "wxyz"
+      },
+      "initial_velocity_axes": {
+        "forward": "world +x",
+        "lateral": "world +y",
+        "angular": "world +y"
+      },
+      "scenario": "drop",
+      "segment_count": 24,
+      "geom_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "body_ids": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "half_sizes": [
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ]
+      ],
+      "section_axes": {
+        "x": "centerline tangent",
+        "y": "strip width",
+        "z": "strip thickness"
+      },
+      "friction": {
+        "self": 0.5,
+        "environment": 0.5,
+        "combination": "terrain priority 1 selects environment friction; cable/cable uses self friction"
+      },
+      "contact_solver": {
+        "time_constant_s": 0.003,
+        "damping_ratio": 1.0,
+        "solimp": [
+          0.95,
+          0.99,
+          0.001,
+          0.5,
+          2.0
+        ],
+        "note": "MuJoCo regularization; effective time constant is clipped to at least twice the timestep"
+      },
+      "collision_policy": "explicit contact exclusions cover only direct adjacent cable bodies; non-adjacent cable geoms retain contype/conaffinity self-collision",
+      "steps_descended_definition": "highest lower stair index reached by an observed cable/stair contact; COM crossing alone is not counted",
+      "rest_shape": {
+        "curve": "cos(s) sin(s) s",
+        "turns": 3,
+        "height": 0.006,
+        "radius": 0.03,
+        "argument_speed": 6,
+        "flat": false,
+        "tilt_deg": 0.0
+      },
+      "static_geoms": [
+        {
+          "name": "ground",
+          "type": "plane",
+          "position": [
+            0.0,
+            0.0,
+            -100.0
+          ],
+          "quaternion": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "half_sizes": [
+            100.0,
+            100.0,
+            0.01
+          ]
+        }
+      ],
+      "stairs": [],
+      "energy_diagnostics": {
+        "d_energy_terms": [
+          "gravitational_potential",
+          "joint_spring_potential",
+          "tendon_spring_potential",
+          "flex_edge_potential",
+          "kinetic"
+        ],
+        "cable_elastic_energy": "not provided by the first-party cable plugin; cable_work is an approximate power integral",
+        "elastic_energy_estimate": "available as an independent rectangular-section frame diagnostic; not included in d.energy",
+        "contact_energy": "not included in d.energy"
+      }
+    },
+    "summary": {
+      "status": "complete",
+      "scenario": "drop",
+      "prepared": true,
+      "released": true,
+      "time": 0.18,
+      "duration": 0.18,
+      "dt": 2.5e-05,
+      "steps": 7200,
+      "segment_count": 24,
+      "mass": {
+        "configured_kg": 0.012,
+        "model_kg": 0.012,
+        "error_kg": 0.0
+      },
+      "metrics": {
+        "top_z": 0.06072204230131316,
+        "bottom_z": 0.039930072499488524,
+        "spatial_top_z": 0.08001752633153178,
+        "spatial_bottom_z": 0.038783857959625,
+        "material_top_z": 0.06072204230131316,
+        "material_bottom_z": 0.039930072499488524,
+        "material_first_z": 0.06072204230131316,
+        "material_last_z": 0.039930072499488524,
+        "material_vertical_span": 0.020791969801824635,
+        "com_x": 0.029806770452586104,
+        "com_y": -0.0001656850542283584,
+        "com_z": 0.0671254405292878,
+        "com_vx": -0.0011144392499512754,
+        "com_vy": -0.0008663082876283617,
+        "com_vz": -1.7631799147887022,
+        "kinetic_energy": 0.018885572336879857,
+        "gravitational_energy": 0.007902006859107757,
+        "elastic_energy_estimate": 0.0005142905796081509,
+        "cable_work": 0.010488830942358331,
+        "damping_work": -0.006780896440251961,
+        "contact_work": -0.0033930806508900837,
+        "steps_descended": 0.0,
+        "max_penetration": 0.0024710807417103785,
+        "nonadjacent_self_contacts": 21812.0,
+        "stair_contact_events": 0.0,
+        "max_nonadjacent_self_contacts": 29.0,
+        "max_stair_contacts": 0.0,
+        "confirmed_flip_count": 0.0
+      },
+      "top_z": 0.06072204230131316,
+      "bottom_z": 0.039930072499488524,
+      "spatial_top_z": 0.08001752633153178,
+      "spatial_bottom_z": 0.038783857959625,
+      "material_top_z": 0.06072204230131316,
+      "material_bottom_z": 0.039930072499488524,
+      "material_first_z": 0.06072204230131316,
+      "material_last_z": 0.039930072499488524,
+      "material_vertical_span": 0.020791969801824635,
+      "com_x": 0.029806770452586104,
+      "com_y": -0.0001656850542283584,
+      "com_z": 0.0671254405292878,
+      "com_vx": -0.0011144392499512754,
+      "com_vy": -0.0008663082876283617,
+      "com_vz": -1.7631799147887022,
+      "kinetic_energy": 0.018885572336879857,
+      "gravitational_energy": 0.007902006859107757,
+      "elastic_energy_estimate": 0.0005142905796081509,
+      "cable_work": 0.010488830942358331,
+      "damping_work": -0.006780896440251961,
+      "contact_work": -0.0033930806508900837,
+      "steps_descended": 0.0,
+      "max_penetration": 0.0024710807417103785,
+      "nonadjacent_self_contacts": 21812.0,
+      "stair_contact_events": 0.0,
+      "max_nonadjacent_self_contacts": 29.0,
+      "max_stair_contacts": 0.0,
+      "confirmed_flip_count": 0.0,
+      "prepare_status": "converged",
+      "settle_speed": 0.0,
+      "settle_damping": 0.00010873417464008593,
+      "settle_steps": 0,
+      "initial_guess_used": false,
+      "static_solve": {
+        "status": "converged",
+        "success": true,
+        "message": "The relative error between two consecutive iterates is at most 0.000000",
+        "calls": 1986,
+        "support_calls": 9,
+        "optimizer_success": true,
+        "support_success": true,
+        "initial_contacts": 0,
+        "contacts": 0,
+        "support_adjustment": [
+          -1.236781857361153e-18,
+          2.1940086548787676e-17,
+          -1.8184398624060799e-06
+        ],
+        "native_force_residual_max": 3.577867169202165e-18,
+        "native_global_residual_max": 0.11772000000000007,
+        "anchor_error_m": 1.8184398624110365e-06,
+        "qpos_finite": true,
+        "restored": false,
+        "wall_seconds": 0.062000000005355105,
+        "initial_residual_norm": 2.9580053371590562,
+        "initial_residual_max_normalized": 0.9238247748452617,
+        "full_mass_acceleration_residual_max": 0.0,
+        "normalized_native_torque_residual": 1.013100908710546e-15,
+        "normalized_full_force_residual": 0.0,
+        "manual_forward_passive_max_error": 0.0,
+        "manual_forward_bias_max_error": 0.0,
+        "force_residual_tolerance": 0.001,
+        "anchor_tolerance_m": 0.0002,
+        "callback_wait_seconds": 0.0,
+        "active_wall_seconds": 0.062000000005355105
+      },
+      "settle_simulated_seconds": 0.0,
+      "settle_residual_acceleration": 0.0,
+      "settle_force_residual": 0.0,
+      "settle_anchor_error_m": 1.8184398624110365e-06,
+      "settle_thresholds": {
+        "equivalent_speed_m_s": 0.002,
+        "relative_force_residual": 0.01,
+        "anchor_error_m": 0.0002
+      },
+      "settle_damping_note": "temporary inertia-scaled relaxation damping; physical damping restored before release, residual measured while held",
+      "freefall_check": {
+        "samples": 7200,
+        "max_height_error": 0.0003631597984895679,
+        "release_com_z": 0.22568428073079824,
+        "release_com_vz": 0.0,
+        "status": "observed"
+      },
+      "energy_diagnostics": {
+        "approximate": true,
+        "d_energy_includes_cable_elastic": false,
+        "elastic_energy_estimate": 0.0005142905796081509,
+        "elastic_energy_definition": "plugin rotation-vector difference and rectangular Saint-Venant J, Iy, Iz; diagnostic only",
+        "elastic_energy_gradient_check": "small joint rotation differs from plugin torque by about 11%; do not treat as an exact potential",
+        "cable_work_definition": "signed integral of qfrc_passive dot qvel after removing known joint damping",
+        "damping_work_definition": "signed integral of -sum(dof_damping * qvel^2)",
+        "contact_work_definition": "constraint generalized power; includes solver work and is diagnostic"
+      },
+      "contact_diagnostics": {
+        "nonadjacent_self_contact_events": 21812,
+        "stair_contact_events": 0,
+        "max_nonadjacent_self_contacts_per_step": 29,
+        "max_stair_contacts_per_step": 0,
+        "steps_descended_definition": "highest lower stair index reached by an observed cable/stair contact; COM crossing alone is not counted"
+      },
+      "static_equilibrium_length": 0.228744790607664,
+      "bottom_onset_time": 0.055174999999998,
+      "collapse_time": 0.13527499999998918,
+      "step_events": [],
+      "movement_classification": "no_step_contact",
+      "support_diagnostics": {
+        "weight_n": 0.11772,
+        "support_fraction": 0.1,
+        "support_threshold_n": 0.011772000000000001,
+        "dwell_s": 0.02,
+        "simultaneous_window_s": 0.001,
+        "last_time": null,
+        "events": [],
+        "verified_steps": [],
+        "candidate_flip_count": 0,
+        "candidate_endpoint_sequence": [],
+        "confirmed_flip_count": 0,
+        "confirmed_endpoint_sequence": []
+      },
+      "quiet_duration_s": 0.0,
+      "research_metric_definitions": {
+        "static_equilibrium_length": "vertical distance between material endpoints immediately before release or after stairs placement",
+        "bottom_onset_time": "first post-release time when the material lower endpoint moves beyond max(0.5 mm, 0.5% initial vertical span)",
+        "collapse_time": "first post-release time with endpoint vertical span <= 1.05 * turns * strip_thickness, only when initial span exceeds this threshold",
+        "step_events": "new lower stair indices reached by cable/stair contact, with endpoint class from material-order end regions"
+      }
+    },
+    "wall_seconds": 1.7189999999827705
+  },
+  "half_timestep": {
+    "config": {
+      "schema_version": 1,
+      "name": "质心和时间步长检查",
+      "scenario": "drop",
+      "material": {
+        "turns": 3,
+        "radius": 0.03,
+        "strip_width": 0.003,
+        "strip_thickness": 0.0015,
+        "pitch": 0.002,
+        "mass": 0.012,
+        "young_modulus": 100000000.0,
+        "shear_modulus": 37037037.03703704,
+        "damping": 1e-05,
+        "friction": 0.5,
+        "self_friction": 0.5
+      },
+      "scene": {
+        "gravity": 9.81,
+        "step_height": 0.04,
+        "step_depth": 0.08,
+        "step_width": 0.3,
+        "step_count": 6,
+        "tilt_deg": 25,
+        "initial_angular_velocity": 0,
+        "initial_forward_velocity": 0,
+        "initial_lateral_velocity": 0,
+        "launch_offset": 0,
+        "settle_time": 2.0
+      },
+      "numerics": {
+        "profile": "preview",
+        "duration": 0.18,
+        "sample_hz": 60,
+        "segments_per_turn": 8,
+        "timestep": 1.25e-05,
+        "max_wall_seconds": 600.0,
+        "contact_time_constant": 0.003
+      },
+      "provenance": {
+        "preset": "illustrative: not experimentally calibrated"
+      }
+    },
+    "metadata": {
+      "schema_version": 1,
+      "model_version": "helical-box-cable-v3",
+      "engine_version": "3.15.0",
+      "mujoco_version": "3.15.0",
+      "units": {
+        "length": "m",
+        "mass": "kg",
+        "time": "s",
+        "force": "N",
+        "energy": "J",
+        "stiffness": "Pa"
+      },
+      "coordinate_system": {
+        "world_up": "+z",
+        "stairs_direction": "+x",
+        "quaternion": "wxyz"
+      },
+      "initial_velocity_axes": {
+        "forward": "world +x",
+        "lateral": "world +y",
+        "angular": "world +y"
+      },
+      "scenario": "drop",
+      "segment_count": 24,
+      "geom_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "body_ids": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "half_sizes": [
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ],
+        [
+          0.0114811834523,
+          0.0015,
+          0.00075
+        ]
+      ],
+      "section_axes": {
+        "x": "centerline tangent",
+        "y": "strip width",
+        "z": "strip thickness"
+      },
+      "friction": {
+        "self": 0.5,
+        "environment": 0.5,
+        "combination": "terrain priority 1 selects environment friction; cable/cable uses self friction"
+      },
+      "contact_solver": {
+        "time_constant_s": 0.003,
+        "damping_ratio": 1.0,
+        "solimp": [
+          0.95,
+          0.99,
+          0.001,
+          0.5,
+          2.0
+        ],
+        "note": "MuJoCo regularization; effective time constant is clipped to at least twice the timestep"
+      },
+      "collision_policy": "explicit contact exclusions cover only direct adjacent cable bodies; non-adjacent cable geoms retain contype/conaffinity self-collision",
+      "steps_descended_definition": "highest lower stair index reached by an observed cable/stair contact; COM crossing alone is not counted",
+      "rest_shape": {
+        "curve": "cos(s) sin(s) s",
+        "turns": 3,
+        "height": 0.006,
+        "radius": 0.03,
+        "argument_speed": 6,
+        "flat": false,
+        "tilt_deg": 0.0
+      },
+      "static_geoms": [
+        {
+          "name": "ground",
+          "type": "plane",
+          "position": [
+            0.0,
+            0.0,
+            -100.0
+          ],
+          "quaternion": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "half_sizes": [
+            100.0,
+            100.0,
+            0.01
+          ]
+        }
+      ],
+      "stairs": [],
+      "energy_diagnostics": {
+        "d_energy_terms": [
+          "gravitational_potential",
+          "joint_spring_potential",
+          "tendon_spring_potential",
+          "flex_edge_potential",
+          "kinetic"
+        ],
+        "cable_elastic_energy": "not provided by the first-party cable plugin; cable_work is an approximate power integral",
+        "elastic_energy_estimate": "available as an independent rectangular-section frame diagnostic; not included in d.energy",
+        "contact_energy": "not included in d.energy"
+      }
+    },
+    "summary": {
+      "status": "complete",
+      "scenario": "drop",
+      "prepared": true,
+      "released": true,
+      "time": 0.18,
+      "duration": 0.18,
+      "dt": 1.25e-05,
+      "steps": 14400,
+      "segment_count": 24,
+      "mass": {
+        "configured_kg": 0.012,
+        "model_kg": 0.012,
+        "error_kg": 0.0
+      },
+      "metrics": {
+        "top_z": 0.06630539683843392,
+        "bottom_z": 0.04414060394106229,
+        "spatial_top_z": 0.07877125524762918,
+        "spatial_bottom_z": 0.042979102553491265,
+        "material_top_z": 0.06630539683843392,
+        "material_bottom_z": 0.04414060394106229,
+        "material_first_z": 0.06630539683843392,
+        "material_last_z": 0.04414060394106229,
+        "material_vertical_span": 0.02216479289737163,
+        "com_x": 0.029908075364333032,
+        "com_y": -7.97548888337813e-05,
+        "com_z": 0.06694385686173178,
+        "com_vx": -0.00048574156919119346,
+        "com_vy": -0.00038312857345742325,
+        "com_vz": -1.7644403063783753,
+        "kinetic_energy": 0.018938437812414995,
+        "gravitational_energy": 0.007880630829763065,
+        "elastic_energy_estimate": 0.00043103699125492096,
+        "cable_work": 0.010633117521964481,
+        "damping_work": -0.006550099278614595,
+        "contact_work": -0.0037847376390437184,
+        "steps_descended": 0.0,
+        "max_penetration": 0.0024589345613339414,
+        "nonadjacent_self_contacts": 39460.0,
+        "stair_contact_events": 0.0,
+        "max_nonadjacent_self_contacts": 23.0,
+        "max_stair_contacts": 0.0,
+        "confirmed_flip_count": 0.0
+      },
+      "top_z": 0.06630539683843392,
+      "bottom_z": 0.04414060394106229,
+      "spatial_top_z": 0.07877125524762918,
+      "spatial_bottom_z": 0.042979102553491265,
+      "material_top_z": 0.06630539683843392,
+      "material_bottom_z": 0.04414060394106229,
+      "material_first_z": 0.06630539683843392,
+      "material_last_z": 0.04414060394106229,
+      "material_vertical_span": 0.02216479289737163,
+      "com_x": 0.029908075364333032,
+      "com_y": -7.97548888337813e-05,
+      "com_z": 0.06694385686173178,
+      "com_vx": -0.00048574156919119346,
+      "com_vy": -0.00038312857345742325,
+      "com_vz": -1.7644403063783753,
+      "kinetic_energy": 0.018938437812414995,
+      "gravitational_energy": 0.007880630829763065,
+      "elastic_energy_estimate": 0.00043103699125492096,
+      "cable_work": 0.010633117521964481,
+      "damping_work": -0.006550099278614595,
+      "contact_work": -0.0037847376390437184,
+      "steps_descended": 0.0,
+      "max_penetration": 0.0024589345613339414,
+      "nonadjacent_self_contacts": 39460.0,
+      "stair_contact_events": 0.0,
+      "max_nonadjacent_self_contacts": 23.0,
+      "max_stair_contacts": 0.0,
+      "confirmed_flip_count": 0.0,
+      "prepare_status": "converged",
+      "settle_speed": 0.0,
+      "settle_damping": 0.00010873417464008593,
+      "settle_steps": 0,
+      "initial_guess_used": false,
+      "static_solve": {
+        "status": "converged",
+        "success": true,
+        "message": "The relative error between two consecutive iterates is at most 0.000000",
+        "calls": 1986,
+        "support_calls": 9,
+        "optimizer_success": true,
+        "support_success": true,
+        "initial_contacts": 0,
+        "contacts": 0,
+        "support_adjustment": [
+          -1.236781857361153e-18,
+          2.1940086548787676e-17,
+          -1.8184398624060799e-06
+        ],
+        "native_force_residual_max": 3.577867169202165e-18,
+        "native_global_residual_max": 0.11772000000000007,
+        "anchor_error_m": 1.8184398624110365e-06,
+        "qpos_finite": true,
+        "restored": false,
+        "wall_seconds": 0.0629999999946449,
+        "initial_residual_norm": 2.9580053371590562,
+        "initial_residual_max_normalized": 0.9238247748452617,
+        "full_mass_acceleration_residual_max": 0.0,
+        "normalized_native_torque_residual": 1.013100908710546e-15,
+        "normalized_full_force_residual": 0.0,
+        "manual_forward_passive_max_error": 0.0,
+        "manual_forward_bias_max_error": 0.0,
+        "force_residual_tolerance": 0.001,
+        "anchor_tolerance_m": 0.0002,
+        "callback_wait_seconds": 0.0,
+        "active_wall_seconds": 0.0629999999946449
+      },
+      "settle_simulated_seconds": 0.0,
+      "settle_residual_acceleration": 0.0,
+      "settle_force_residual": 0.0,
+      "settle_anchor_error_m": 1.8184398624110365e-06,
+      "settle_thresholds": {
+        "equivalent_speed_m_s": 0.002,
+        "relative_force_residual": 0.01,
+        "anchor_error_m": 0.0002
+      },
+      "settle_damping_note": "temporary inertia-scaled relaxation damping; physical damping restored before release, residual measured while held",
+      "freefall_check": {
+        "samples": 14400,
+        "max_height_error": 0.00018157613093354452,
+        "release_com_z": 0.22568428073079824,
+        "release_com_vz": 0.0,
+        "status": "observed"
+      },
+      "energy_diagnostics": {
+        "approximate": true,
+        "d_energy_includes_cable_elastic": false,
+        "elastic_energy_estimate": 0.00043103699125492096,
+        "elastic_energy_definition": "plugin rotation-vector difference and rectangular Saint-Venant J, Iy, Iz; diagnostic only",
+        "elastic_energy_gradient_check": "small joint rotation differs from plugin torque by about 11%; do not treat as an exact potential",
+        "cable_work_definition": "signed integral of qfrc_passive dot qvel after removing known joint damping",
+        "damping_work_definition": "signed integral of -sum(dof_damping * qvel^2)",
+        "contact_work_definition": "constraint generalized power; includes solver work and is diagnostic"
+      },
+      "contact_diagnostics": {
+        "nonadjacent_self_contact_events": 39460,
+        "stair_contact_events": 0,
+        "max_nonadjacent_self_contacts_per_step": 23,
+        "max_stair_contacts_per_step": 0,
+        "steps_descended_definition": "highest lower stair index reached by an observed cable/stair contact; COM crossing alone is not counted"
+      },
+      "static_equilibrium_length": 0.228744790607664,
+      "bottom_onset_time": 0.05501249999999598,
+      "collapse_time": 0.1357499999999871,
+      "step_events": [],
+      "movement_classification": "no_step_contact",
+      "support_diagnostics": {
+        "weight_n": 0.11772,
+        "support_fraction": 0.1,
+        "support_threshold_n": 0.011772000000000001,
+        "dwell_s": 0.02,
+        "simultaneous_window_s": 0.001,
+        "last_time": null,
+        "events": [],
+        "verified_steps": [],
+        "candidate_flip_count": 0,
+        "candidate_endpoint_sequence": [],
+        "confirmed_flip_count": 0,
+        "confirmed_endpoint_sequence": []
+      },
+      "quiet_duration_s": 0.0,
+      "research_metric_definitions": {
+        "static_equilibrium_length": "vertical distance between material endpoints immediately before release or after stairs placement",
+        "bottom_onset_time": "first post-release time when the material lower endpoint moves beyond max(0.5 mm, 0.5% initial vertical span)",
+        "collapse_time": "first post-release time with endpoint vertical span <= 1.05 * turns * strip_thickness, only when initial span exceeds this threshold",
+        "step_events": "new lower stair indices reached by cable/stair contact, with endpoint class from material-order end regions"
+      }
+    },
+    "wall_seconds": 3.2660000000032596
+  },
+  "scope": "Held drop integration and event checks; staircase and experimental acceptance are reported separately.",
+  "passed": true,
+  "model_version": "helical-box-cable-v3",
+  "engine_version": "3.15.0"
+}

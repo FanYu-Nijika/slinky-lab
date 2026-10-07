@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
-import type { Frame, MetricKey, RunResult } from "../types";
+import type { Frame, MetricKey, PositionMetricKey, RunResult } from "../types";
 import { METRIC_KEYS, METRIC_LABELS } from "../types";
 
 interface Props {
@@ -11,13 +11,15 @@ interface Props {
 }
 
 const energyKeys: MetricKey[] = ["kinetic_energy", "gravitational_energy", "cable_work", "damping_work", "contact_work"];
-const positionKeys: MetricKey[] = ["top_z", "bottom_z", "com_z"];
+const materialPositionKeys: PositionMetricKey[] = ["top_z", "bottom_z", "com_z"];
+const spatialPositionKeys: PositionMetricKey[] = ["spatial_top_z", "spatial_bottom_z", "com_z"];
 
 export function ChartsPanel({ frames, run, onUploadReference, onExportPng }: Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.EChartsType>();
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>("com_z");
   const [chartMode, setChartMode] = useState<"position" | "energy">("position");
+  const [positionMode, setPositionMode] = useState<"material" | "spatial">("material");
   const [referenceMetric, setReferenceMetric] = useState<MetricKey>("com_z");
   const [referenceSeries, setReferenceSeries] = useState<Array<[number, number]>>([]);
   const [referenceError, setReferenceError] = useState("");
@@ -37,7 +39,8 @@ export function ChartsPanel({ frames, run, onUploadReference, onExportPng }: Pro
   useEffect(() => {
     const chart = chartInstance.current;
     if (!chart) return;
-    const keys = chartMode === "position" ? positionKeys : energyKeys;
+    const requestedKeys: Array<MetricKey | PositionMetricKey> = chartMode === "position" ? positionMode === "material" ? materialPositionKeys : spatialPositionKeys : energyKeys;
+    const keys = requestedKeys.filter((key) => frames.some((frame) => Number.isFinite(frame.metrics[key]))) as Array<MetricKey | PositionMetricKey>;
     const colors = ["#54d5ff", "#ff9f7d", "#c3a6ff", "#7ce3b2", "#ffd166"];
     chart.setOption({
       animation: false,
@@ -49,10 +52,10 @@ export function ChartsPanel({ frames, run, onUploadReference, onExportPng }: Pro
       yAxis: { type: "value", name: chartMode === "position" ? "高度 / m" : "能量 / J", nameTextStyle: { color: "#71859f" }, axisLabel: { color: "#71859f", fontSize: 10 }, splitLine: { lineStyle: { color: "#1d2d42" } }, axisLine: { lineStyle: { color: "#334763" } } },
       series: [
         ...keys.map((key, index) => ({ name: METRIC_LABELS[key], type: "line", showSymbol: false, smooth: false, lineStyle: { width: key === selectedMetric ? 2.6 : 1.3, color: colors[index] }, itemStyle: { color: colors[index] }, data: frames.map((frame) => [frame.time, frame.metrics[key] ?? null]) })),
-        ...(referenceSeries.length && keys.includes(referenceMetric) ? [{ name: "实验参考", type: "line", showSymbol: false, smooth: false, lineStyle: { width: 1.6, type: "dashed", color: "#f4c66e" }, itemStyle: { color: "#f4c66e" }, data: referenceSeries }] : []),
+        ...(referenceSeries.length && keys.some((key) => key === referenceMetric) ? [{ name: "实验参考", type: "line", showSymbol: false, smooth: false, lineStyle: { width: 1.6, type: "dashed", color: "#f4c66e" }, itemStyle: { color: "#f4c66e" }, data: referenceSeries }] : []),
       ],
     }, true);
-  }, [frames, chartMode, selectedMetric, referenceMetric, referenceSeries]);
+  }, [frames, chartMode, positionMode, selectedMetric, referenceMetric, referenceSeries]);
 
   const exportPng = () => {
     const chart = chartInstance.current;
@@ -60,6 +63,7 @@ export function ChartsPanel({ frames, run, onUploadReference, onExportPng }: Pro
   };
 
   const current = frames.length ? frames[frames.length - 1].metrics : {};
+  const hasSpatialSeries = frames.some((frame) => Number.isFinite(frame.metrics.spatial_top_z) || Number.isFinite(frame.metrics.spatial_bottom_z));
   const localRmse = computeRmse(frames, referenceSeries, referenceMetric);
   return (
     <section className="analysis-card" data-testid="charts-panel">
@@ -70,16 +74,17 @@ export function ChartsPanel({ frames, run, onUploadReference, onExportPng }: Pro
         </div>
         <div className="analysis-actions">
           <div className="segmented compact"><button className={chartMode === "position" ? "active" : ""} onClick={() => setChartMode("position")}>关键位置</button><button className={chartMode === "energy" ? "active" : ""} onClick={() => setChartMode("energy")}>能量/做功</button></div>
+          {chartMode === "position" && <div className="segmented compact"><button className={positionMode === "material" ? "active" : ""} onClick={() => setPositionMode("material")}>材料端点</button><button disabled={!hasSpatialSeries} className={positionMode === "spatial" ? "active" : ""} onClick={() => setPositionMode("spatial")}>空间极值</button></div>}
           <button className="icon-button" title="导出 PNG" onClick={exportPng}>↗ PNG</button>
         </div>
       </div>
       <div ref={chartRef} className="chart-canvas" />
       <div className="metric-strip">
-        <div><span>顶部</span><strong>{formatMetric(current.top_z)} m</strong></div>
-        <div><span>底部</span><strong>{formatMetric(current.bottom_z)} m</strong></div>
+        <div><span>材料上端</span><strong>{formatMetric(current.top_z)} m</strong></div>
+        <div><span>材料下端</span><strong>{formatMetric(current.bottom_z)} m</strong></div>
+        <div><span>空间最高</span><strong>{formatMetric(current.spatial_top_z)} m</strong></div>
+        <div><span>空间最低</span><strong>{formatMetric(current.spatial_bottom_z)} m</strong></div>
         <div><span>质心</span><strong>{formatMetric(current.com_z)} m</strong></div>
-        <div><span>跨阶</span><strong>{formatMetric(current.steps_descended, 0)}</strong></div>
-        <div><span>最大穿透</span><strong>{formatMetric(current.max_penetration, 4)} m</strong></div>
       </div>
       <div className="reference-row">
         <span>实验数据对照</span>

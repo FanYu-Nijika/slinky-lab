@@ -1,0 +1,64 @@
+name: Promote accepted image
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published version whose physics acceptance is complete
+        required: true
+        default: v0.1.0
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  packages: write
+
+concurrency:
+  group: slinky-latest-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      VERSION: ${{ inputs.version }}
+      IMAGE: ghcr.io/fanyu-nijika/slinky-lab
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Validate version input
+        run: '[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.version }}
+      - name: Require complete physics acceptance
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          from pathlib import Path
+          report = json.loads(Path("docs/validation-results.json").read_text(encoding="utf-8"))
+          if report.get("overall_acceptance") is not True or report.get("latest_promotion_allowed") is not True:
+              sys.exit("Physics acceptance is incomplete; latest was not changed.")
+          PY
+      - name: Require successful publication and anonymous pull
+        run: |
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow verify.yml --branch "$VERSION" \
+            --commit "$SOURCE_SHA" --event push --limit 20 --json conclusion,headSha,headBranch \
+            | jq -e --arg version "$VERSION" --arg sha "$SOURCE_SHA" \
+              'any(.[]; .headSha == $sha and .headBranch == $version and .conclusion == "success")'
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote the exact published digest
+        run: |
+          docker pull "$IMAGE:$VERSION"
+          EXPECTED_SHA="$(git rev-parse HEAD)"
+          ACTUAL_SHA="$(docker image inspect "$IMAGE:$VERSION" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+          SOURCE="$(docker image inspect "$IMAGE:$VERSION" --format '{{index .RepoDigests 0}}')"
+          docker buildx imagetools create --tag "$IMAGE:latest" "$SOURCE"
+          printf '%s\n' "$SOURCE" >> "$GITHUB_STEP_SUMMARY"

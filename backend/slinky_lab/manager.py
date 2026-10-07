@@ -122,6 +122,14 @@ def _worker_run(task: dict[str, Any], controls: Any, events: Any, data_dir: str)
     timeout_requested = False
     paused_since: float | None = None
     paused_total = 0.0
+    # ``preparing`` remains true until the first frame is published.  This
+    # gives a step command received at the prepare/frame boundary the explicit
+    # meaning "finish preparation, then stop at the first frame".
+    preparing = True
+    preparation_progress = 0.0
+    preparation_step_requested = False
+    pause_after_prepare = False
+    resume_seen = False
     simulation: Any = None
     frame_count = 0
     sample_period = 1.0 / config.numerics.sample_hz
@@ -155,7 +163,7 @@ def _worker_run(task: dict[str, Any], controls: Any, events: Any, data_dir: str)
     def inspect_controls() -> None:
         """Consume commands without blocking while physics is integrating."""
 
-        nonlocal paused, cancel_requested, pause_requested, step_requested
+        nonlocal paused, cancel_requested, pause_requested, step_requested, preparation_step_requested, resume_seen, pause_after_prepare
         while True:
             try:
                 command = controls.get_nowait()
@@ -171,18 +179,69 @@ def _worker_run(task: dict[str, Any], controls: Any, events: Any, data_dir: str)
                 return
             if action == "pause":
                 pause_requested = True
+                resume_seen = False
             elif action == "resume":
                 paused = False
                 pause_requested = False
+                resume_seen = True
+                if preparing:
+                    # A newer explicit resume cancels a preparation-step
+                    # request, including one already converted to the
+                    # pause-after-first-frame boundary state.
+                    preparation_step_requested = False
+                    pause_after_prepare = False
                 resume_from_pause()
             elif action == "step" and (paused or pause_requested):
-                # A step is handled by the paused loop, where it can integrate
-                # through the next sample boundary and therefore changes the UI.
-                step_requested = True
+                # During preparation, step resumes only the preparation phase;
+                # it never silently advances the released simulation.  The
+                # first frame is published paused after prepare returns.
+                if preparing:
+                    preparation_step_requested = True
+                else:
+                    # A normal step is handled by the paused loop, where it
+                    # integrates through the next sample boundary.
+                    step_requested = True
+
+    def wait_for_preparation_pause() -> None:
+        """Hold inside ``prepare`` while a user pause is active.
+
+        ``Simulation.prepare`` exposes a cancellation callback but no pause
+        callback.  Blocking here keeps its static solve/relaxation state
+        intact, lets cancel interrupt promptly, and excludes the wait from
+        the wall-clock budget through ``paused_since``.
+        """
+
+        nonlocal paused, paused_since, pause_after_prepare, preparation_step_requested, pause_requested
+        if not pause_requested:
+            return
+        paused = True
+        if paused_since is None:
+            paused_since = time.monotonic()
+        event_status("paused", progress=min(0.25, preparation_progress), sim_time=0.0)
+        while True:
+            inspect_controls()
+            if cancel_requested:
+                return
+            if preparation_step_requested:
+                preparation_step_requested = False
+                pause_after_prepare = True
+                paused = False
+                pause_requested = False
+                resume_from_pause()
+                event_status("preparing", progress=min(0.25, preparation_progress), sim_time=0.0)
+                return
+            if not pause_requested:
+                paused = False
+                resume_from_pause()
+                event_status("preparing", progress=min(0.25, preparation_progress), sim_time=0.0)
+                return
+            time.sleep(0.05)
 
     def should_cancel() -> bool:
         nonlocal timeout_requested
         inspect_controls()
+        if preparing and pause_requested:
+            wait_for_preparation_pause()
         if active_wall_seconds() > config.numerics.max_wall_seconds:
             timeout_requested = True
             return True
@@ -196,10 +255,11 @@ def _worker_run(task: dict[str, Any], controls: Any, events: Any, data_dir: str)
         Re-reading that state after preparation lets this worker honour a
         pause or cancellation even when it loaded the task just before the
         API transaction committed.  A queued resume also clears the initial
-        pause flag.
+        pause flag; ``resume_seen`` prevents a stale paused row from undoing a
+        resume command that was already consumed from the control queue.
         """
 
-        nonlocal cancel_requested, pause_requested
+        nonlocal cancel_requested, pause_requested, resume_seen
         latest = store.get_run(run_id)
         if latest is None:
             return
@@ -207,15 +267,39 @@ def _worker_run(task: dict[str, Any], controls: Any, events: Any, data_dir: str)
         if status == "cancelled":
             cancel_requested = True
         elif status == "paused":
-            pause_requested = True
+            if not resume_seen:
+                pause_requested = True
         elif status == "queued":
             pause_requested = False
+            resume_seen = False
+        else:
+            resume_seen = False
 
     def prepare_progress(value: Any) -> None:
+        nonlocal preparation_progress
         if isinstance(value, dict):
             value = value.get("progress", 0.0)
         progress = _safe_float(value)
+        preparation_progress = progress
         event_status("preparing", progress=min(0.25, progress), sim_time=0.0)
+
+    def apply_preparation_boundary() -> None:
+        """Convert controls seen at the prepare/frame boundary into state."""
+
+        nonlocal paused, paused_since, pause_requested, pause_after_prepare, preparation_step_requested
+        if preparation_step_requested:
+            preparation_step_requested = False
+            pause_after_prepare = True
+            paused = False
+            pause_requested = False
+            resume_from_pause()
+        if pause_requested:
+            was_paused = paused
+            paused = True
+            if paused_since is None:
+                paused_since = time.monotonic()
+            if not was_paused:
+                event_status("paused", progress=min(0.25, preparation_progress), sim_time=0.0)
 
     def append_frame(writer: TrajectoryWriter, emit: bool = True) -> dict[str, Any]:
         nonlocal frame_count, last_time
@@ -243,18 +327,39 @@ def _worker_run(task: dict[str, Any], controls: Any, events: Any, data_dir: str)
         prepare(progress=prepare_progress, should_cancel=should_cancel)
         inspect_controls()
         refresh_queued_state()
+        apply_preparation_boundary()
+        if active_wall_seconds() > config.numerics.max_wall_seconds:
+            timeout_requested = True
         if timeout_requested:
             raise TimeoutError("Simulation exceeded max_wall_seconds during preparation")
         if cancel_requested:
             event_status("cancelled", sim_time=last_time)
             return
         metadata = _call_metadata(simulation)
+        inspect_controls()
+        refresh_queued_state()
+        apply_preparation_boundary()
+        if active_wall_seconds() > config.numerics.max_wall_seconds:
+            timeout_requested = True
+        if timeout_requested:
+            raise TimeoutError("Simulation exceeded max_wall_seconds during preparation")
+        if cancel_requested:
+            event_status("cancelled", sim_time=last_time)
+            return
         _worker_emit(events, {"kind": "metadata", "run_id": run_id, "metadata": metadata})
         store.write_model_xml(run_id, _simulation_xml(simulation))
         with TrajectoryWriter(run_dir / "trajectory.h5") as writer:
             frame = append_frame(writer)
+            preparing = False
             next_sample = max(sample_period, _safe_float(frame.get("time")) + sample_period)
-            event_status("paused" if pause_requested else "running", sim_time=last_time)
+            if pause_after_prepare or paused or pause_requested:
+                paused = True
+                pause_requested = False
+                if paused_since is None:
+                    paused_since = time.monotonic()
+                event_status("paused", progress=min(1.0, last_time / config.numerics.duration), sim_time=last_time)
+            else:
+                event_status("running", sim_time=last_time)
 
             while True:
                 inspect_controls()

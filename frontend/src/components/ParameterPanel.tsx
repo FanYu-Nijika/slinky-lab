@@ -55,6 +55,16 @@ export function ParameterPanel({ config, presets, onChange, onPreset, collapsed 
   const updateMaterial = (patch: Partial<Material>) => onChange({ ...config, material: { ...config.material, ...patch } });
   const updateScene = (patch: Partial<Scene>) => onChange({ ...config, scene: { ...config.scene, ...patch } });
   const updateNumerics = (patch: Partial<Numerics>) => onChange({ ...config, numerics: { ...config.numerics, ...patch } });
+  const chooseProfile = (profile: Numerics["profile"]) => {
+    if (profile === config.numerics.profile) return;
+    const segments = config.numerics.segments_per_turn ?? (config.numerics.profile === "fine" ? 24 : 12);
+    const dt = config.numerics.timestep ?? (config.numerics.profile === "fine" ? 0.00005 : 0.0002);
+    // Keep preset-specific refinement relative to its current mesh. Bending
+    // frequencies rise as segment length shrinks, so halve h and quarter dt.
+    const refine = profile === "fine";
+    updateNumerics({ profile, segments_per_turn: refine ? Math.min(64, segments * 2) : Math.max(8, Math.floor(segments / 2)),
+                     timestep: refine ? Math.max(0.000001, dt / 4) : Math.min(0.002, dt * 4) });
+  };
 
   return (
     <aside className={`panel left-panel ${collapsed ? "is-collapsed" : ""}`} data-testid="parameter-panel">
@@ -99,9 +109,13 @@ export function ParameterPanel({ config, presets, onChange, onPreset, collapsed 
             <>
               <NumberField label="阶高" value={config.scene.step_height} min={0.002} max={0.3} step={0.001} unit="m" onChange={(value) => updateScene({ step_height: value })} />
               <NumberField label="阶深" value={config.scene.step_depth} min={0.015} max={0.5} step={0.001} unit="m" onChange={(value) => updateScene({ step_depth: value })} />
+              <NumberField label="阶宽" value={config.scene.step_width} min={0.05} max={2} step={0.01} unit="m" onChange={(value) => updateScene({ step_width: value })} />
               <NumberField label="阶梯数量" value={config.scene.step_count} min={3} max={20} step={1} unit="阶" onChange={(value) => updateScene({ step_count: value })} />
               <NumberField label="初始倾角" value={config.scene.tilt_deg} min={-80} max={80} step={1} unit="°" onChange={(value) => updateScene({ tilt_deg: value })} />
               <NumberField label="初始前向速度" value={config.scene.initial_forward_velocity} min={-2} max={2} step={0.01} unit="m/s" onChange={(value) => updateScene({ initial_forward_velocity: value })} />
+              <NumberField label="初始侧向速度" value={config.scene.initial_lateral_velocity ?? 0} min={-2} max={2} step={0.01} unit="m/s" onChange={(value) => updateScene({ initial_lateral_velocity: value })} />
+              <NumberField label="初始角速度" value={config.scene.initial_angular_velocity} min={-20} max={20} step={0.1} unit="rad/s" onChange={(value) => updateScene({ initial_angular_velocity: value })} />
+              <NumberField label="边缘摆放偏移" value={config.scene.launch_offset} min={-0.1} max={0.2} step={0.001} unit="m" onChange={(value) => updateScene({ launch_offset: value })} />
             </>
           )}
         </Section>
@@ -119,10 +133,19 @@ export function ParameterPanel({ config, presets, onChange, onPreset, collapsed 
           <NumberField label="总质量" value={config.material.mass} min={0.001} max={2} step={0.001} unit="kg" onChange={(value) => updateMaterial({ mass: value })} />
         </Section>
 
+        <Section title="弹性与接触" defaultOpen={false}>
+          <NumberField label="杨氏模量 E" value={config.material.young_modulus} min={1e4} max={3e11} step={1e6} unit="Pa" onChange={(value) => updateMaterial({ young_modulus: value })} />
+          <NumberField label="剪切模量 G" value={config.material.shear_modulus} min={1e3} max={1.5e11} step={1e6} unit="Pa" onChange={(value) => updateMaterial({ shear_modulus: value })} />
+          <NumberField label="铰接阻尼" value={config.material.damping} min={0} max={0.1} step={0.000001} unit="Nm·s" onChange={(value) => updateMaterial({ damping: value })} />
+          <NumberField label="台阶/地面摩擦" value={config.material.friction} min={0} max={3} step={0.05} onChange={(value) => updateMaterial({ friction: value })} />
+          <NumberField label="圈间摩擦" value={config.material.self_friction ?? 0.5} min={0} max={3} step={0.05} onChange={(value) => updateMaterial({ self_friction: value })} />
+          {config.scenario === "drop" && <NumberField label="平衡松弛时长" value={config.scene.settle_time} min={0.05} max={15} step={0.1} unit="s" onChange={(value) => updateScene({ settle_time: value })} />}
+        </Section>
+
         <Section title="计算精度">
           <div className="segmented">
-            <button className={config.numerics.profile === "preview" ? "active" : ""} onClick={() => updateNumerics({ profile: "preview" })}>快速预览</button>
-            <button className={config.numerics.profile === "fine" ? "active" : ""} onClick={() => updateNumerics({ profile: "fine" })}>精细研究</button>
+            <button className={config.numerics.profile === "preview" ? "active" : ""} onClick={() => chooseProfile("preview")}>快速预览</button>
+            <button className={config.numerics.profile === "fine" ? "active" : ""} onClick={() => chooseProfile("fine")}>精细研究</button>
           </div>
           <NumberField label="仿真时长" value={config.numerics.duration} min={0.02} max={30} step={0.1} unit="s" onChange={(value) => updateNumerics({ duration: value })} />
           <NumberField label="采样频率" value={config.numerics.sample_hz} min={10} max={120} step={1} unit="Hz" onChange={(value) => updateNumerics({ sample_hz: value })} />
@@ -130,7 +153,9 @@ export function ParameterPanel({ config, presets, onChange, onPreset, collapsed 
           {showAdvanced && (
             <>
               <NumberField label="每圈段数" value={config.numerics.segments_per_turn || (config.numerics.profile === "fine" ? 24 : 12)} min={8} max={64} step={1} unit="段" onChange={(value) => updateNumerics({ segments_per_turn: value })} />
-              <NumberField label="积分步长" value={config.numerics.timestep || (config.numerics.profile === "fine" ? 0.0001 : 0.0002)} min={0.000001} max={0.002} step={0.00001} unit="s" onChange={(value) => updateNumerics({ timestep: value })} />
+              <NumberField label="积分步长" value={config.numerics.timestep || (config.numerics.profile === "fine" ? 0.00005 : 0.0002)} min={0.000001} max={0.002} step={0.000001} unit="s" onChange={(value) => updateNumerics({ timestep: value })} />
+              <NumberField label="接触时间常数" value={config.numerics.contact_time_constant ?? 0.003} min={0.00005} max={0.03} step={0.0001} unit="s" onChange={(value) => updateNumerics({ contact_time_constant: value })} />
+              <NumberField label="计算时间上限" value={config.numerics.max_wall_seconds} min={5} max={14400} step={60} unit="s" onChange={(value) => updateNumerics({ max_wall_seconds: value })} />
             </>
           )}
         </Section>

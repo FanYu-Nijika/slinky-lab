@@ -83,3 +83,14 @@ def test_nonadjacent_turns_have_real_self_contact_after_bending():
               simulation._cable_geom_to_material.get(int(contact.geom[1]), -1))
              for contact in simulation.data.contact]
     assert any(a >= 0 and b >= 0 and abs(a - b) >= 6 for a, b in pairs)
+
+
+def test_stair_angular_perturbation_uses_world_flip_axis():
+    config = RunConfig.model_validate({"scenario": "stairs", "material": {"turns": 3},
+                                     "scene": {"tilt_deg": 45, "initial_angular_velocity": 2},
+                                     "numerics": {"segments_per_turn": 8}})
+    simulation = Simulation(config)
+    velocity = np.empty(6)
+    mujoco.mj_objectVelocity(simulation.model, simulation.data, mujoco.mjtObj.mjOBJ_BODY,
+                            simulation._body_ids[0], velocity, 0)
+    assert velocity[:3] == pytest.approx([0, 2, 0], abs=1e-10)

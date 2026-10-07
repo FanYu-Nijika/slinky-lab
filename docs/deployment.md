@@ -41,6 +41,8 @@ docker image inspect ghcr.io/fanyu-nijika/slinky-lab:v0.1.0 \
 
 论文或报告记录镜像摘要、运行目录中的 `config.json`、`model.xml` 和 `summary.json`。预设验证状态与镜像标签分开记录；只有验收通过后才更新 `latest`。
 
+`Promote accepted image` 工作流要求版本提交的 `docs/validation-results.json` 同时将 `overall_acceptance` 和 `latest_promotion_allowed` 设为 true，并检查该版本的测试、发布和匿名拉取工作流已全部成功。它核对镜像的源码提交标签后按不可变摘要晋升。当前报告为 false，所以研究预览版本不会晋升到 `latest`。
+
 ## 发布检查
 
 CI 在 Linux 上执行软件测试、构建镜像、运行真实求解器，并重启容器核对命名卷数据。版本镜像发布后，另一个全新 runner 使用空 Docker 凭据目录匿名拉取并执行相同计算检查。首次发布需要在 GitHub Packages 中把包的可见性设为 Public；仓库公开不等于镜像自动公开。若匿名检查先于可见性设置而失败，在设置后重新运行该检查。

@@ -19,3 +19,5 @@ reports/
 .test-tmp/
 manual-security-check/
 MUJOCO_LOG.TXT
+.pytest-storage-lock/
+pytest-probe/

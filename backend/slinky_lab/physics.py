@@ -479,7 +479,10 @@ class Simulation:
             if dof_count >= 6:
                 self.data.qvel[dof_start] = self.config.scene.initial_forward_velocity
                 self.data.qvel[dof_start + 1] = self.config.scene.initial_lateral_velocity
-                self.data.qvel[dof_start + 4] = self.config.scene.initial_angular_velocity
+                # Free-joint angular qvel uses the root material frame. The
+                # scene perturbation is about world +Y, the stair flip axis.
+                world_omega = np.array([0.0, self.config.scene.initial_angular_velocity, 0.0])
+                self.data.qvel[dof_start + 3:dof_start + 6] = self._rest_frames[0].T @ world_omega
         mujoco.mj_forward(self.model, self.data)
 
     def _joint_dof_count(self, joint_id: int) -> int:
@@ -1027,6 +1030,7 @@ class Simulation:
             "mujoco_version": getattr(mujoco, "__version__", "3.15.0"),
             "units": {"length": "m", "mass": "kg", "time": "s", "force": "N", "energy": "J", "stiffness": "Pa"},
             "coordinate_system": {"world_up": "+z", "stairs_direction": "+x", "quaternion": "wxyz"},
+            "initial_velocity_axes": {"forward": "world +x", "lateral": "world +y", "angular": "world +y"},
             "scenario": self.config.scenario,
             "segment_count": self._segments,
             "geom_ids": [int(value) for value in self._geom_ids],
