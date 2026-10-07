@@ -1,0 +1,62 @@
+name: Stair walking research validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run only the base case or the full numerical convergence check"
+        required: true
+        type: choice
+        options:
+          - extended
+          - quick
+        default: extended
+
+permissions:
+  contents: read
+
+concurrency:
+  group: slinky-research-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  stairs-validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Install locked runtime and project
+        run: |
+          python -m pip install --require-hashes -r requirements.lock
+          python -m pip install -e '.[test]'
+
+      - name: Run bounded stairs validation
+        env:
+          VALIDATION_MODE: ${{ inputs.mode }}
+        run: |
+          if [ "$VALIDATION_MODE" = "quick" ]; then
+            python scripts/validate_stairs.py --quick --output reports/stairs-validation
+          elif [ "$VALIDATION_MODE" = "extended" ]; then
+            python scripts/validate_stairs.py --output reports/stairs-validation
+          else
+            echo "Unknown validation mode" >&2
+            exit 2
+          fi
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: stairs-validation-${{ inputs.mode }}
+          path: reports/stairs-validation/
+          if-no-files-found: warn
