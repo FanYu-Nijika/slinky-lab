@@ -190,16 +190,25 @@ def static_fit_diagnostic(summary: dict[str, Any]) -> dict[str, Any]:
 
 
 def dynamic_collapse_comparison(summary: dict[str, Any]) -> dict[str, Any]:
-    observed = finite_number(summary.get("collapse_time"))
+    prepared = bool(summary.get("prepared"))
+    released = bool(summary.get("released"))
+    observed = finite_number(summary.get("collapse_time")) if prepared and released else None
     base = {
         "literature_source": "Cross and Wheatland (2012), plastic B report",
         "literature_source_url": "https://arxiv.org/abs/1208.4629",
         "literature_collapse_time_s": LITERATURE_COLLAPSE_TIME_S,
         "reference_type": "Table II best-fit model total collapse time; not an independently measured event timestamp",
         "simulation_collapse_time_s": observed,
-        "comparison_type": "dynamic prediction versus reported literature timing; no acceptance threshold applied",
+        "comparison_type": "dynamic prediction versus Table II best-fit model timing; no acceptance threshold applied",
         "experimental_support": False,
     }
+    if not prepared or not released:
+        base.update({
+            "status": "preparation_not_completed",
+            "relative_error": None,
+            "reason": "preparation_not_completed",
+        })
+        return base
     if observed is None:
         base.update({
             "status": "event_not_observed",
@@ -212,6 +221,20 @@ def dynamic_collapse_comparison(summary: dict[str, Any]) -> dict[str, Any]:
         "relative_error": abs(observed - LITERATURE_COLLAPSE_TIME_S) / LITERATURE_COLLAPSE_TIME_S,
     })
     return base
+
+
+def event_diagnostic(summary: dict[str, Any], key: str) -> dict[str, Any]:
+    """Keep held-preparation clocks and event times out of released dynamics."""
+
+    if not bool(summary.get("prepared")) or not bool(summary.get("released")):
+        return {"time_s": None, "reason": "preparation_not_completed"}
+    value = finite_number(summary.get(key))
+    if value is None:
+        return {
+            "time_s": None,
+            "reason": f"event not observed before the configured simulation duration ({summary.get('duration')} s)",
+        }
+    return {"time_s": value, "reason": None}
 
 
 def artifact_diagnostic(case_dir: Path) -> dict[str, Any]:
@@ -231,7 +254,7 @@ def report_markdown(report: dict[str, Any]) -> str:
         "",
         "This is one real solver run using the existing `literature-39-turn` preset without changing material parameters, geometry, initial state, or numerical settings. Static fitting and dynamic timing are reported as separate evidence classes.",
         "",
-        f"- status: `{case.get('status')}`; wall time: `{case.get('wall_seconds')} s`; simulated time: `{case.get('simulation_time')} s`",
+        f"- status: `{case.get('status')}`; phase: `{case.get('phase')}` (execution phase: `{case.get('execution_phase')}`, failure phase: `{case.get('failure_phase')}`); wall time: `{case.get('wall_seconds')} s`; model clock: `{case.get('model_clock_s')} s`; released integration time: `{case.get('released_integration_time_s')} s`",
         f"- timeout/native warning/nonfinite/export error: `{case.get('timeout_detected')}` / `{case.get('native_warning_detected')}` / `{case.get('nonfinite_detected')}` / `{case.get('export_error')}`",
         f"- model version: `{case.get('model_version')}`; artifacts complete: `{case.get('artifacts_complete')}`",
         "",
@@ -285,6 +308,11 @@ def main() -> int:
             "error": run_error,
             "wall_seconds": None,
             "simulation_time": None,
+            "phase": "failed",
+            "execution_phase": "preparation",
+            "failure_phase": "preparation",
+            "model_clock_s": None,
+            "released_integration_time_s": 0.0,
             "timeout_detected": False,
             "native_warning_detected": False,
             "nonfinite_detected": False,
@@ -327,10 +355,17 @@ def main() -> int:
             run_error = run_error or f"frames read failed: {read_error}"
         elif isinstance(frames_value, list):
             frames_data = frames_value
+    release_ready = bool(summary.get("prepared")) and bool(summary.get("released"))
     case = {
         **record,
         "model_version": metadata_data.get("model_version"),
-        "simulation_time": summary.get("time", record.get("simulation_time")),
+        "simulation_time": record.get("simulation_time", 0.0),
+        "phase": record.get("phase", "released" if release_ready else "preparation"),
+        "execution_phase": record.get("execution_phase", "released" if release_ready else "preparation"),
+        "failure_phase": record.get("failure_phase"),
+        "release_ready": record.get("release_ready", release_ready),
+        "model_clock_s": record.get("model_clock_s", finite_number(summary.get("time"))),
+        "released_integration_time_s": record.get("released_integration_time_s", record.get("simulation_time", 0.0) if release_ready else 0.0),
         "duration": summary.get("duration", base.numerics.duration if base is not None else None),
         "warning_detected": bool(record.get("warning_detected") or warnings_payload.get("warning_detected")),
         "native_warning_detected": bool(record.get("native_warning_detected") or warnings_payload.get("native_warning_detected")),
@@ -341,16 +376,8 @@ def main() -> int:
         "config_matches_preset": config_match,
         "export_error": bool(record.get("hdf5_error") or record.get("frame_errors") or run_error or not artifacts["complete"]),
     }
-    bottom_onset_time = simulation_summary.get("bottom_onset_time")
-    collapse_time = simulation_summary.get("collapse_time")
-    case["bottom_onset"] = {
-        "time_s": bottom_onset_time,
-        "reason": None if bottom_onset_time is not None else f"event not observed before {simulation_summary.get('duration')} s",
-    }
-    case["collapse"] = {
-        "time_s": collapse_time,
-        "reason": None if collapse_time is not None else f"event not observed before {simulation_summary.get('duration')} s",
-    }
+    case["bottom_onset"] = event_diagnostic(simulation_summary, "bottom_onset_time")
+    case["collapse"] = event_diagnostic(simulation_summary, "collapse_time")
     report = {
         "created_at": created_at,
         "preset": PRESET_ID,

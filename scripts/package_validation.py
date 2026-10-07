@@ -146,6 +146,8 @@ def _write_readme(staging: Path, created_at: str, evidence: list[dict[str, Any]]
         "- Drop：16/32 segments-per-turn 收敛记录、v3 quick repeat，以及 HTTP/WebSocket runtime-stream-after-lock 记录。drop 几何材料是演示假设，不能作为实测塑料彩虹圈参数。",
         "- Linux 容器 smoke 和 Linux HTTP/WebSocket runtime-stream 记录；仅收录仓库中的 JSON 证据，没有补造容器原始轨迹。",
         "- 静态标定：39 圈文献目标长度拟合记录；文献映射和几何参数假设已在 JSON 中保留。",
+        "- 39 圈独立释放检查：准备阶段超时，未生成释放帧；附加 interpretation 文件解释旧报告的模型时钟和文献时序措辞，原始旧报告保持原样。",
+        "- v0.1.0：公开镜像匿名拉取、真实流式计算/导出、原生拱形初态与短释放检查；完整拱形释放另行记录为滑移。",
         "- 楼梯：stopped、world-axis sliding、world-axis side_fall、depth12 baseline，以及本轮三档收敛报告和 raw 证据。",
         "",
         "## 证据边界",
@@ -154,6 +156,8 @@ def _write_readme(staging: Path, created_at: str, evidence: list[dict[str, Any]]
         "如果 reports/stairs-validation/validation-summary.json 存在，扩展三档记录会按其实际 passed 字段收录；文件存在本身不会改变总体验收或推广状态。",
         "静态长度标定和 drop 数值收敛属于数值证据，不等于实验校准。能量中的 cable elastic energy 是独立诊断估计，不能宣称 MuJoCo d.energy 已包含 cable 插件弹性能。",
         "参考视频和派生图未收录。source_sha256 保留原始文件哈希；JSON 路径脱敏会改变复制文件内容，MANIFEST.sha256 对应发布副本。",
+        "原始 artifact 清单可能引用未收录的日志或锁文件；这些文件名和哈希用于说明来源，实际文件以本包的 MANIFEST.sha256 为准。",
+        "v0.1.0 二进制镜像固定源码 d919d8b905927ddaf05b7b4e9507854cd57f1289；其后主分支的报告解释和检查器修改不替换该镜像或版本标签。",
         "",
         "## 文件校验",
         "",
@@ -345,6 +349,27 @@ def build_package(root: Path, release_dir: Path) -> dict[str, Any]:
                 ("docs/validation/stairs-convergence.md", "validation/stairs/convergence.md"),
             ],
         )
+        if (root / "docs/validation/v010-public-arched.json").is_file():
+            _add_record(
+                root, staging, evidence, "v010-public-image", "v0.1.0 anonymous Linux image checks", "passed",
+                "公开镜像的匿名拉取、真实流式运行/导出及原生拱形短释放检查通过；软件与初态检查不等于三阶步态验收。", [
+                    ("docs/validation/v010-anonymous-pull.json", "validation/image-v010/anonymous-pull.json"),
+                    ("docs/validation/v010-public-runtime-stream.json", "validation/image-v010/runtime-stream.json"),
+                    ("docs/validation/v010-public-arched.json", "validation/image-v010/arched-initial-release.json"),
+                    ("docs/validation/v010-container.json", "validation/image-v010/container.json"),
+                    ("reports/v010-verification/reports/pytest.xml", "validation/image-v010/pytest.xml"),
+                    ("reports/v010-public-pull/public-image-digest.json", "validation/image-v010/image-digest.json"),
+                ],
+            )
+            public_arched_dir = root / "reports/v010-public-pull/public-arched-validation"
+            if (public_arched_dir / "validation-summary.json").is_file():
+                _add_record(
+                    root, staging, evidence, "v010-anonymous-arched-raw", "Anonymous image native arched evidence", "passed",
+                    "全新Linux runner从v0.1.0公开镜像生成的真实初态与0.12秒释放文件；不代表连续三阶步态通过。", [
+                        (source.relative_to(root).as_posix(), f"validation/image-v010/arched-raw/{source.relative_to(public_arched_dir).as_posix()}")
+                        for source in sorted(public_arched_dir.rglob("*")) if _include_report_file(source)
+                    ],
+                )
         optional_validation_dir = root / "reports" / "stairs-validation"
         optional_summary = optional_validation_dir / "validation-summary.json"
         if optional_summary.is_file():
@@ -379,7 +404,10 @@ def build_package(root: Path, release_dir: Path) -> dict[str, Any]:
                     destination = f"validation/optional/{directory_name}/{source.relative_to(optional_dir).as_posix()}"
                     optional_files.append((relative, destination))
             if optional_files:
-                summary_status = _reported_status(summary_files[0], "reported")
+                status_source = summary_files[0]
+                if directory_name == "arched-steel-probe" and (optional_dir / "compact-conclusion.json").is_file():
+                    status_source = optional_dir / "compact-conclusion.json"
+                summary_status = _reported_status(status_source, "reported")
                 _add_record(
                     root, staging, evidence, record_id, title, summary_status,
                     f"可选目录仅因存在实际 summary JSON 才收录；reported status={summary_status}，目录存在本身不改变总体验收。",
@@ -399,6 +427,8 @@ def build_package(root: Path, release_dir: Path) -> dict[str, Any]:
         "overall_acceptance": validation_index.get("overall_acceptance"),
         "latest_promotion_allowed": validation_index.get("latest_promotion_allowed"),
         "experimental_support": validation_index.get("experimental_support"),
+        "published_image": validation_index.get("software", {}).get("public_image"),
+        "packager_sha256": _sha256(Path(__file__)),
         "evidence": evidence,
         "files": records,
         "source_index_sha256": _sha256(validation_index_path),

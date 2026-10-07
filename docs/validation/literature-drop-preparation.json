@@ -1,0 +1,97 @@
+{
+  "schema": "slinky-lab.literature-drop.preparation-failure.v1",
+  "created_at": "2026-10-07T09:07:02.168952+00:00",
+  "source_sha": "29920d423274425fa19239099f6ad0d47b40812b",
+  "workflow_url": "https://github.com/FanYu-Nijika/slinky-lab/actions/runs/37584016222",
+  "model_version": "helical-box-cable-v3",
+  "engine_version": "3.15.0",
+  "preset": "literature-39-turn",
+  "status": "timeout",
+  "phase": "preparation",
+  "passed": false,
+  "prepared": false,
+  "released": false,
+  "model_clock_s": 0.39658000000025584,
+  "released_integration_time_s": 0.0,
+  "requested_release_duration_s": 0.35,
+  "released_steps": 0,
+  "wall_seconds": 7200.266130353,
+  "wall_budget_seconds": 7200.0,
+  "segments_per_turn": 8,
+  "segment_count": 312,
+  "timestep_s": 1e-05,
+  "frame_count": 0,
+  "native_held_equilibrium": {
+    "status": "observed",
+    "prepare_status": "not_converged",
+    "static_solve_status": "timeout",
+    "settle_force_residual": 0.4667340142841037,
+    "settle_anchor_error_m": 2.06441854954505e-05,
+    "thresholds": {
+      "equivalent_speed_m_s": 0.002,
+      "relative_force_residual": 0.01,
+      "anchor_error_m": 0.0002
+    },
+    "numerically_converged": false,
+    "note": "native held-equilibrium diagnostic; this is not an independent material validation"
+  },
+  "static_fit_in_this_run": {
+    "status": "not_observed",
+    "measured_static_equilibrium_length_m": null,
+    "target_suspended_length_m": 1.14,
+    "absolute_error_m": null,
+    "relative_error": null,
+    "reason": "static equilibrium length was not finite in the solver summary",
+    "evidence_boundary": "static fitting is absent; no dynamic conclusion follows"
+  },
+  "static_fit_separate_record": "docs/validation/static-calibration.json",
+  "native_warning_detected": false,
+  "nonfinite_detected": false,
+  "exports_present": true,
+  "export_note": "Empty frames/HDF5/CSV are preserved diagnostic artifacts, not released trajectories.",
+  "com_freefall": {
+    "status": "not_evaluated",
+    "relative_error": null,
+    "reason": "preparation_not_completed; no released frames"
+  },
+  "bottom_onset": {
+    "time_s": null,
+    "reason": "preparation_not_completed; no release"
+  },
+  "collapse": {
+    "time_s": null,
+    "reason": "preparation_not_completed; no release"
+  },
+  "dynamic_collapse_comparison": {
+    "status": "not_evaluated",
+    "simulation_collapse_time_s": null,
+    "relative_error": null,
+    "literature_model_collapse_time_s": 0.27,
+    "literature_source_url": "https://arxiv.org/html/1208.4629",
+    "reference_type": "Table II best-fit model result for plastic Slinky B, not an independent raw measured time",
+    "reason": "preparation_not_completed; no timing comparison is possible"
+  },
+  "raw_record_interpretation": {
+    "case.simulation_time": "0.39658 s in the original report is the held preparation model clock, not released duration.",
+    "bottom_onset.reason_and_collapse.reason": "Original event-not-observed-before-0.35 s wording is superseded by preparation-not-completed.",
+    "evidence_boundary.dynamic": "Original observation wording for 0.27 s is superseded by Table II fitted-model reference."
+  },
+  "evidence_boundary": "This run failed to obtain a native held equilibrium within its wall budget. It provides no released dynamics, static fit value, or experimental support. A separate previous static fit remains a fit to its own target under its own solver conditions.",
+  "original_artifact_sha256": {
+    "literature-39-turn/config.json": "00d7bd823d0268ebbf415baacf7a419e3d3c3b7b4f273061b65c9b9bd038fe1f",
+    "literature-39-turn/frames.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "literature-39-turn/metadata.json": "b62f6a615d6cb5b9fbe8c45765caa7a2db501c55893e71e0eb73d1e8abc2a30b",
+    "literature-39-turn/metrics.csv": "a65aae4d4a7708875642efab2fa56afef0177bb38768967787a5488f7a4868e4",
+    "literature-39-turn/model.xml": "c795c348759563bf20b6687f7002e26cf76ffcfbff41b47dcad529fe772012b1",
+    "literature-39-turn/summary.json": "c86608da0b67f2c085bf6c56b90d19da22d1efea1d3839db8715322bc323e463",
+    "literature-39-turn/support-diagnostics.json": "ae65d01a6bbb84d77a99735ee5b35be71cc8a625e425ce7b3190c45f404bf938",
+    "literature-39-turn/support-events.json": "ae834d0b0c0f48e8800b52c60da7e9ed01827c5cab84adaf4b472c4cf2b72a65",
+    "literature-39-turn/trajectory.h5": "49262dc22470de4568b361159a497605ce5eab2160f9aef14e750eaa8f760602",
+    "literature-39-turn/warnings.json": "92ad48f63fd013cdf12b41abe7386adf0335ae9132988b5a30753df11a234bc1",
+    "validation-report.md": "2f55518cd2a3d0713f0ae2950ca335c00364057fca8211ffbfb632d30da6ea1d",
+    "validation-summary.json": "2a6a1969528fe746d0e9093230aff8c97049b516a69b9639d40bab32cd48daec"
+  },
+  "original_evidence_directory": "reports/literature-drop",
+  "raw_preserved": true,
+  "experimental_support": false
+}

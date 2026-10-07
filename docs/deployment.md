@@ -41,6 +41,14 @@ docker image inspect ghcr.io/fanyu-nijika/slinky-lab:v0.1.0 \
 
 论文或报告记录镜像摘要、运行目录中的 `config.json`、`model.xml` 和 `summary.json`。预设验证状态与镜像标签分开记录；只有验收通过后才更新 `latest`。
 
+已发布的 `v0.1.0` 对应源码 `d919d8b905927ddaf05b7b4e9507854cd57f1289`，摘要为 `sha256:f16cd11a7bd6d162d00f6fdf46760ccf14b7c72d79d25754709f184b3b3c245e`。包为 Public；全新Linux runner已匿名拉取，并完成真实HTTP/WebSocket计算、导出及拱形初态/短释放检查。工作流证据见 [v0.1.0发布验证](https://github.com/FanYu-Nijika/slinky-lab/actions/runs/37595591457)。这是研究预览，楼梯完整验收未通过，未发布 `latest` 镜像标签。
+
+需要固定同一二进制镜像时，将运行命令末尾替换为：
+
+```text
+ghcr.io/fanyu-nijika/slinky-lab@sha256:f16cd11a7bd6d162d00f6fdf46760ccf14b7c72d79d25754709f184b3b3c245e
+```
+
 `Promote accepted image` 工作流要求版本提交的 `docs/validation-results.json` 同时将 `overall_acceptance` 和 `latest_promotion_allowed` 设为 true，并检查该版本的测试、发布和匿名拉取工作流已全部成功。它核对镜像的源码提交标签后按不可变摘要晋升。当前报告为 false，所以研究预览版本不会晋升到 `latest`。
 
 ## 发布检查

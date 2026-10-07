@@ -1,0 +1,31 @@
+{
+  "model_version": "helical-box-cable-v4",
+  "passed": true,
+  "source_file_sha256": {
+    "backend/slinky_lab/physics.py": "da6b886b25f1d0f911a6201b28b9a8435d818137978322b95fa8bf819a479b4d",
+    "backend/slinky_lab/schemas.py": "5d4b27a89bd80f9ea016c9662d83685d2175b4efce4a5cc9fe304f409a234023",
+    "backend/slinky_lab/presets.py": "ab0f321745d1f7eb0d2e0f7bd0b583280cf730851dac1df01d1068468e43bac9",
+    "backend/slinky_lab/__init__.py": "02513c2d96f40d8af0e3bb2bfc49dace92afda1d464bdf7e49f2b3591ee4cd20"
+  },
+  "acceptance_scope": "initial geometry and bounded short passive release only",
+  "geometry": [
+    {
+      "preset": "stairs-arched",
+      "passed": true
+    },
+    {
+      "preset": "stairs-arched-dense",
+      "passed": true
+    }
+  ],
+  "short_release": {
+    "status": "completed",
+    "simulation_time": 0.12,
+    "wall_seconds": 34.314681948,
+    "warning_detected": false,
+    "frame_count": 13,
+    "max_penetration": 0.00027604050773884247
+  },
+  "three_step_gait_verified": false,
+  "experimental_support": false
+}

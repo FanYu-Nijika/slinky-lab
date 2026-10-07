@@ -219,8 +219,8 @@ def run_case(base: RunConfig, spec: dict[str, Any], output: Path) -> dict[str, A
         nonlocal next_heartbeat
         elapsed = time.monotonic() - started
         if elapsed >= next_heartbeat:
-            simulated = simulation.time if simulation is not None else 0.0
-            print(f"[{spec['name']}] simulation {simulated:.5f} s; wall {elapsed:.1f}/{spec['wall_seconds']:g} s", flush=True)
+            model_clock = simulation.time if simulation is not None else 0.0
+            print(f"[{spec['name']}] model clock {model_clock:.5f} s; wall {elapsed:.1f}/{spec['wall_seconds']:g} s", flush=True)
             next_heartbeat = elapsed + 30.0
         return elapsed > float(spec["wall_seconds"])
 
@@ -250,7 +250,7 @@ def run_case(base: RunConfig, spec: dict[str, Any], output: Path) -> dict[str, A
                     simulation.step()
                     last_accepted_time = simulation.time
                     if simulation.time + 1.0e-12 >= next_progress:
-                        print(f"[{spec['name']}] simulated {simulation.time:.3f}/{simulation.duration:g} s; wall {time.monotonic() - started:.1f} s", flush=True)
+                        print(f"[{spec['name']}] model clock {simulation.time:.3f}/{simulation.duration:g} s; wall {time.monotonic() - started:.1f} s", flush=True)
                         next_progress += 0.2
                     if simulation.time + 1.0e-12 >= next_sample:
                         append_frame(simulation, frames, frame_errors)
@@ -313,6 +313,35 @@ def run_case(base: RunConfig, spec: dict[str, Any], output: Path) -> dict[str, A
     else:
         status = "completed"
 
+    summary_time = simulation_summary.get("time")
+    try:
+        model_clock_s = float(summary_time)
+        if not math.isfinite(model_clock_s):
+            model_clock_s = None
+    except (TypeError, ValueError):
+        model_clock_s = None
+    if model_clock_s is None and simulation is not None:
+        try:
+            candidate_clock = float(simulation.time)
+            model_clock_s = candidate_clock if math.isfinite(candidate_clock) else None
+        except (TypeError, ValueError):
+            model_clock_s = None
+    prepared = bool(simulation_summary.get("prepared", getattr(simulation, "_prepared", False)))
+    released = bool(simulation_summary.get("released", getattr(simulation, "_released", False)))
+    release_ready = prepared and released
+    terminal_failure = bool(error or timed_out or status in {"failed", "timeout", "cancelled", "unstable"})
+    execution_phase = "released" if release_ready else "preparation"
+    if terminal_failure:
+        phase = "failed"
+        failure_phase = "released_integration" if release_ready else "preparation"
+    else:
+        phase = execution_phase
+        failure_phase = None
+    released_integration_time_s = last_accepted_time if release_ready else 0.0
+    simulation_time_s = released_integration_time_s
+    engine_time_after_failure_s = simulation.time if simulation is not None and terminal_failure else None
+    post_failure_metrics_valid = not bool(terminal_failure or warning_detected)
+
     hdf5_error = write_trajectory(output / "trajectory.h5", frames, metadata, config, spec["name"])
     write_metrics_csv(output / "metrics.csv", frames)
     if simulation_summary.get("support_diagnostics") is not None:
@@ -334,8 +363,14 @@ def run_case(base: RunConfig, spec: dict[str, Any], output: Path) -> dict[str, A
         "support_evidence": support,
         "last_accepted_time_s": last_accepted_time,
         "last_exported_frame_time_s": frames[-1]["time"] if frames else None,
-        "engine_time_after_failure_s": simulation.time if simulation is not None and error else None,
-        "post_failure_instantaneous_metrics_valid": not bool(error or warning_detected),
+        "engine_time_after_failure_s": engine_time_after_failure_s,
+        "post_failure_instantaneous_metrics_valid": post_failure_metrics_valid,
+        "phase": phase,
+        "execution_phase": execution_phase,
+        "failure_phase": failure_phase,
+        "model_clock_s": model_clock_s,
+        "released_integration_time_s": released_integration_time_s,
+        "release_ready": release_ready,
     })
     write_json(output / "summary.json", summary_payload)
     record = {
@@ -344,11 +379,19 @@ def run_case(base: RunConfig, spec: dict[str, Any], output: Path) -> dict[str, A
         "error": error,
         "wall_seconds": wall_seconds,
         "wall_budget_seconds": spec["wall_seconds"],
-        # MuJoCo can reset its data and clock after BADQACC. Keep the accepted
-        # timeline separate from that reset state, which is only diagnostic.
-        "simulation_time": last_accepted_time if error else simulation_summary.get("time", 0.0),
-        "engine_time_after_failure_s": simulation.time if simulation is not None and error else None,
-        "post_failure_instantaneous_metrics_valid": not bool(error or warning_detected),
+        # ``model_clock_s`` preserves data.time, including held preparation and
+        # BADQACC reset clocks; ``simulation_time`` is released accepted time.
+        "simulation_time": simulation_time_s,
+        "phase": phase,
+        "execution_phase": execution_phase,
+        "failure_phase": failure_phase,
+        "prepared": prepared,
+        "released": released,
+        "release_ready": release_ready,
+        "model_clock_s": model_clock_s,
+        "released_integration_time_s": released_integration_time_s,
+        "engine_time_after_failure_s": engine_time_after_failure_s,
+        "post_failure_instantaneous_metrics_valid": post_failure_metrics_valid,
         "duration": config.numerics.duration,
         "config": config_data,
         "warning_detected": warning_detected,

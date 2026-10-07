@@ -5,7 +5,7 @@
   "software": {
     "pytest_passed": 66,
     "browser_tests_passed": 13,
-    "linux_container_ci": "29920d423274425fa19239099f6ad0d47b40812b passed verify, actual container calculations, streamed exports and restart persistence",
+    "linux_container_ci": "d919d8b905927ddaf05b7b4e9507854cd57f1289: 66 pytest and 13 browser tests; actual container runs, exports, restart and anonymous pull passed",
     "windows_native_failure": {
       "run_id": "6d793726139341cd93abf8fe677272da",
       "error": "worker exited unexpectedly, Windows status 3221225477",
@@ -69,6 +69,19 @@
       "visibility": "public",
       "anonymous_pull_passed": true,
       "workflow_url": "https://github.com/FanYu-Nijika/slinky-lab/actions/runs/37583504264"
+    },
+    "public_image": {
+      "tag": "v0.1.0",
+      "source_sha": "d919d8b905927ddaf05b7b4e9507854cd57f1289",
+      "digest": "sha256:f16cd11a7bd6d162d00f6fdf46760ccf14b7c72d79d25754709f184b3b3c245e",
+      "visibility": "public",
+      "anonymous_pull_passed": true,
+      "workflow_url": "https://github.com/FanYu-Nijika/slinky-lab/actions/runs/37595591457",
+      "runtime_stream_report": "docs/validation/v010-public-runtime-stream.json",
+      "arched_initial_release_report": "docs/validation/v010-public-arched.json",
+      "latest_tag_published": false,
+      "anonymous_pull_report": "docs/validation/v010-anonymous-pull.json",
+      "container_report": "docs/validation/v010-container.json"
     }
   },
   "model_checks": {
@@ -293,6 +306,23 @@
       "max_com_error_m": 0.00017684789969721337,
       "max_penetration_m": 0.0019263266330551466,
       "source": "actual localhost HTTP/WS run; no browser fixture"
+    },
+    "literature_scale_release": {
+      "report": "docs/validation/literature-drop-preparation.json",
+      "source_sha": "29920d423274425fa19239099f6ad0d47b40812b",
+      "workflow_url": "https://github.com/FanYu-Nijika/slinky-lab/actions/runs/37584016222",
+      "status": "timeout",
+      "phase": "preparation",
+      "prepared": false,
+      "released": false,
+      "model_clock_s": 0.39658000000025584,
+      "released_integration_time_s": 0.0,
+      "wall_seconds": 7200.266130353,
+      "frame_count": 0,
+      "native_relative_force_residual": 0.4667340142841037,
+      "native_relative_force_residual_threshold": 0.01,
+      "dynamic_validation": "not_evaluated; preparation_not_completed",
+      "experimental_support": false
     }
   },
   "static_literature_fit": {
@@ -500,5 +530,5 @@
   "latest_promotion_allowed": false,
   "source_evidence_model_version": "helical-box-cable-v2",
   "compatibility_note": "v4 adds optional manually deformed arched stair initial qpos and diagnostics; omitted initial_pose defaults to the legacy tilted pose. Drop and legacy tilted calculations retain their physical definition. Existing v2/v3 evidence is labelled with the actual source model; new arched gait has not been certified.",
-  "updated_at": "2026-10-07T08:09:20.880736+00:00"
+  "updated_at": "2026-10-07T09:07:02.171900+00:00"
 }
