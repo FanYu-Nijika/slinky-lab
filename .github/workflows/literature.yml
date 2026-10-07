@@ -1,0 +1,43 @@
+name: Literature drop validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: slinky-literature-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  literature-drop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 130
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Install locked runtime and project
+        run: |
+          python -m pip install --require-hashes -r requirements.lock
+          python -m pip install -e '.[test]'
+
+      - name: Run literature-39-turn drop validation
+        run: python scripts/validate_literature_drop.py --output reports/literature-drop-validation
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: literature-drop-validation
+          path: reports/literature-drop-validation/
+          if-no-files-found: warn

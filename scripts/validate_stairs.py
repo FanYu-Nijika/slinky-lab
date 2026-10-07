@@ -212,9 +212,16 @@ def run_case(base: RunConfig, spec: dict[str, Any], output: Path) -> dict[str, A
     error: str | None = None
     timed_out = False
     native_baseline = native_log_baseline()
+    next_heartbeat = 30.0
 
     def should_cancel() -> bool:
-        return time.monotonic() - started > float(spec["wall_seconds"])
+        nonlocal next_heartbeat
+        elapsed = time.monotonic() - started
+        if elapsed >= next_heartbeat:
+            simulated = simulation.time if simulation is not None else 0.0
+            print(f"[{spec['name']}] simulation {simulated:.5f} s; wall {elapsed:.1f}/{spec['wall_seconds']:g} s", flush=True)
+            next_heartbeat = elapsed + 30.0
+        return elapsed > float(spec["wall_seconds"])
 
     try:
         with warnings.catch_warnings(record=True) as caught:
