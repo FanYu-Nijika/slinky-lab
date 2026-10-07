@@ -37,7 +37,7 @@ def _sanitize_json(value: Any, root: Path) -> Any:
         return cleaned
     if isinstance(value, list):
         return [_sanitize_json(item, root) for item in value]
-    if isinstance(value, str) and ABSOLUTE_PATH.match(value):
+    if isinstance(value, str) and (ABSOLUTE_PATH.match(value) or value.startswith(("/home/runner/", "/github/workspace/", "/app/", "/data/"))):
         candidate = Path(value)
         try:
             relative = candidate.resolve().relative_to(root.resolve())
