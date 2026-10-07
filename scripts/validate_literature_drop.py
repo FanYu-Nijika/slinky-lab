@@ -195,6 +195,7 @@ def dynamic_collapse_comparison(summary: dict[str, Any]) -> dict[str, Any]:
         "literature_source": "Cross and Wheatland (2012), plastic B report",
         "literature_source_url": "https://arxiv.org/abs/1208.4629",
         "literature_collapse_time_s": LITERATURE_COLLAPSE_TIME_S,
+        "reference_type": "Table II best-fit model total collapse time; not an independently measured event timestamp",
         "simulation_collapse_time_s": observed,
         "comparison_type": "dynamic prediction versus reported literature timing; no acceptance threshold applied",
         "experimental_support": False,
@@ -365,7 +366,7 @@ def main() -> int:
         "dynamic_collapse_comparison": dynamic_collapse_comparison(simulation_summary),
         "evidence_boundary": {
             "static": "The preset's static length participates in a fit to the reported 1.14 m suspended length; this is not independent experimental validation.",
-            "dynamic": "The simulated collapse event is compared with the reported 0.27 s plastic-B observation without assigning a pass threshold or claiming experimental support.",
+            "dynamic": "The simulated endpoint-span collapse event is compared with the Table II fitted-model total collapse time of 0.27 s for plastic B. Event definitions and tied top turns differ; this is a literature-model comparison without an experimental pass threshold.",
         },
     }
     report["execution_passed"] = bool(

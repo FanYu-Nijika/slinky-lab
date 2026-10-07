@@ -1,0 +1,227 @@
+{
+  "schema": "slinky-lab.arched-validation.full-release-observation.v1",
+  "run_id": "4cb01b05b80d491fa075018c16348667",
+  "status": "completed",
+  "model_version": "helical-box-cable-v4",
+  "engine_version": "3.15.0",
+  "mujoco_version": "3.15.0",
+  "config": {
+    "preset": "stairs-arched",
+    "scenario": "stairs",
+    "initial_pose": "arched",
+    "turns": 12,
+    "segments_per_turn": 8,
+    "segment_count": 96,
+    "step_height_m": 0.04,
+    "step_depth_m": 0.12,
+    "step_count": 4,
+    "timestep_s": 2.5e-05,
+    "duration_s": 1.5
+  },
+  "warnings": [],
+  "warning_evidence": "No warning field was persisted; API completed with error=null. MuJoCo native warnings would abort the worker step in this runtime.",
+  "error": null,
+  "trajectory": {
+    "frame_count": 76,
+    "committed_frame_count": 76,
+    "start_time_s": 0.0,
+    "end_time_s": 1.5,
+    "simulated_time_s": 1.5,
+    "sample_period_s": 0.020000000000000316
+  },
+  "event_times": {
+    "raw_gait_first_touch_and_sustained_support": [
+      {
+        "step": 1,
+        "first_touch_time": 0.0606499999999974,
+        "first_touch_label": "last",
+        "first_touch_force_n": 0.5487126546821057,
+        "first_sustained_time": 0.39379999999996074,
+        "first_sustained_label": "last",
+        "middle_support_time": null,
+        "middle_preceded": false,
+        "endpoint_label": "last",
+        "ambiguous": false,
+        "ambiguity_reasons": [],
+        "verified": true,
+        "verified_time": 0.39379999999996074,
+        "verification_reason": "dwell satisfied and stair index is contiguous",
+        "endpoint_supports": [
+          {
+            "label": "last",
+            "time": 0.39379999999996074,
+            "start_time": 0.37379999999996294,
+            "duration_s": 0.0263750000000005,
+            "peak_force_n": 3.2944482070294634
+          },
+          {
+            "label": "first",
+            "time": 0.690950000000352,
+            "start_time": 0.6709500000003098,
+            "duration_s": 0.12232499999999061,
+            "peak_force_n": 2.273907572791246
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "first_touch_time": 1.0272750000009405,
+        "first_touch_label": "last",
+        "first_touch_force_n": 1.4919538437795412,
+        "first_sustained_time": 1.2920750000003234,
+        "first_sustained_label": "last",
+        "middle_support_time": null,
+        "middle_preceded": false,
+        "endpoint_label": "last",
+        "ambiguous": false,
+        "ambiguity_reasons": [],
+        "verified": true,
+        "verified_time": 1.2920750000003234,
+        "verification_reason": "dwell satisfied and stair index is contiguous",
+        "endpoint_supports": [
+          {
+            "label": "last",
+            "time": 1.2920750000003234,
+            "start_time": 1.27207500000037,
+            "duration_s": 0.1250499999999903,
+            "peak_force_n": 2.830913978112842
+          }
+        ]
+      }
+    ],
+    "step_events": [
+      {
+        "time": 0.0606499999999974,
+        "step": 1,
+        "end": "last"
+      },
+      {
+        "time": 1.0272750000009405,
+        "step": 2,
+        "end": "last"
+      }
+    ],
+    "sampled_tread_first_seen": [
+      {
+        "step": 0,
+        "label": "first",
+        "first_sample_time_s": 0.020000000000000316,
+        "peak_single_contact_normal_force_N": 0.5306077650217257,
+        "gait_counted": false
+      },
+      {
+        "step": 1,
+        "label": "last",
+        "first_sample_time_s": 0.07999999999999527,
+        "peak_single_contact_normal_force_N": 0.7992730052982827,
+        "gait_counted": true
+      },
+      {
+        "step": 0,
+        "label": "middle",
+        "first_sample_time_s": 0.09999999999999307,
+        "peak_single_contact_normal_force_N": 0.7401228688257899,
+        "gait_counted": false
+      },
+      {
+        "step": 1,
+        "label": "middle",
+        "first_sample_time_s": 0.47999999999995124,
+        "peak_single_contact_normal_force_N": 0.20266403273893974,
+        "gait_counted": true
+      },
+      {
+        "step": 1,
+        "label": "first",
+        "first_sample_time_s": 0.49999999999994904,
+        "peak_single_contact_normal_force_N": 0.5953821827956103,
+        "gait_counted": true
+      },
+      {
+        "step": 2,
+        "label": "middle",
+        "first_sample_time_s": 1.0400000000009109,
+        "peak_single_contact_normal_force_N": 0.8045327442885173,
+        "gait_counted": true
+      },
+      {
+        "step": 2,
+        "label": "last",
+        "first_sample_time_s": 1.0800000000008176,
+        "peak_single_contact_normal_force_N": 0.5267904914391794,
+        "gait_counted": true
+      }
+    ]
+  },
+  "classification": {
+    "movement_classification": "sliding",
+    "stopped": false,
+    "quiet_duration_s": 0.0,
+    "side_fall": false,
+    "max_abs_com_y_m": 0.04320294575132476,
+    "side_fall_threshold_m": 0.18,
+    "sliding_evidence": {
+      "steps_descended": 2.0,
+      "stair_contact_events": 236900.0,
+      "verified_steps": [
+        1,
+        2
+      ]
+    },
+    "candidate_flip_count": 1,
+    "confirmed_flip_count": 1,
+    "candidate_endpoint_sequence": [
+      "last"
+    ],
+    "confirmed_endpoint_sequence": [
+      "last"
+    ],
+    "conclusion": "滑移；未观察到连续端部交替翻转。step 1 和 step 2 的首次持续端部支撑均为 last，step 1 的 first 端随后在同一阶支撑，不能计作下一阶交替。"
+  },
+  "contact_and_penetration": {
+    "max_penetration_m": 0.00043253579507456847,
+    "nonadjacent_self_contact_events": 2046995.0,
+    "max_nonadjacent_self_contacts_per_step": 276.0,
+    "stair_contact_events": 236900.0,
+    "max_stair_contacts_per_step": 25.0
+  },
+  "initial_pose": {
+    "resolved": "arched",
+    "qpos0_unchanged": true,
+    "initial_elastic_energy_estimate": 0.013274623481689035,
+    "initial_stair_contact_count": 0,
+    "initial_self_contact_count": 0,
+    "initial_max_penetration_m": 0.0,
+    "actual_first_clearance_m": 0.000200000000000089,
+    "actual_free_end_clearance_m": 0.02499999999997507,
+    "equilibrium_status": "manual_non_equilibrium"
+  },
+  "trajectory_extrema": {
+    "com_x_min_m": 0.11744130712000818,
+    "com_x_max_m": 0.3469770195491823,
+    "com_y_min_m": -0.04320294575132476,
+    "com_y_max_m": 0.014009768201272806,
+    "final_metrics": {
+      "com_x": 0.3313673683655485,
+      "com_y": -0.032525687989902255,
+      "com_z": 0.08610647882317882,
+      "com_vx": -0.039801708244047294,
+      "com_vy": 0.06805209774661285,
+      "com_vz": 0.0008670194273293325,
+      "kinetic_energy": 0.000256036250756736,
+      "elastic_energy_estimate": 0.000663305356908291,
+      "max_penetration": 0.00043253579507456847,
+      "steps_descended": 2.0
+    }
+  },
+  "evidence_directory": "reports/arched-validation/full-release-4cb01b05b80d491fa075018c16348667",
+  "source_evidence_directory": "data/runs/4cb01b05b80d491fa075018c16348667",
+  "evidence_files": [
+    "config.json",
+    "metrics.csv",
+    "model.xml",
+    "summary.json",
+    "trajectory.h5"
+  ],
+  "single_run_note": "This is one completed release only; no convergence or experimental validation is inferred."
+}

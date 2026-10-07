@@ -1,5 +1,6 @@
 export type Scenario = "drop" | "stairs";
 export type Profile = "preview" | "fine";
+export type InitialPose = "tilted" | "arched";
 export type RunStatus =
   | "queued"
   | "preparing"
@@ -36,6 +37,11 @@ export interface Scene {
   initial_lateral_velocity?: number;
   launch_offset: number;
   settle_time: number;
+  // Optional so saved configurations from before the arched-start fields remain readable.
+  initial_pose?: InitialPose;
+  arch_rise?: number | null;
+  arch_end_turns?: number;
+  arch_free_clearance?: number;
 }
 
 export interface Numerics {
@@ -237,6 +243,10 @@ export const DEFAULT_SCENE: Scene = {
   initial_lateral_velocity: 0,
   launch_offset: 0,
   settle_time: 2,
+  initial_pose: "tilted",
+  arch_rise: null,
+  arch_end_turns: 2,
+  arch_free_clearance: 0.025,
 };
 
 export const DEFAULT_NUMERICS: Numerics = {

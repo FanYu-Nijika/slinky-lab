@@ -38,7 +38,7 @@ export function RunHistory({ runs, selectedId, selectedRun, onSelect, onExport }
             <div className="run-card-top"><span className={`status-dot status-${run.status}`} /><span className="run-name">{run.config?.name || run.run_id.slice(0, 8)}</span><span className={`status-label status-text-${run.status}`}>{statusLabels[run.status] || run.status}</span></div>
             <div className="run-card-meta"><span>{scenarioLabel(run)}</span><span>{formatDate(run.run_id)}</span></div>
             {run.progress !== undefined && run.status === "running" && <div className="run-progress"><i style={{ width: `${Math.min(100, Math.max(0, run.progress * 100))}%` }} /></div>}
-            <div className="run-card-summary"><span>质心 {metric(run.summary?.com_z)} m</span><span>{metric(run.summary?.steps_descended, 0)} 阶</span></div>
+            <div className="run-card-summary"><span>质心 {metric(run.summary?.com_z)} m</span><span>触及 {metric(run.summary?.steps_descended, 0)} 阶</span></div>
           </button>
         ))}
       </div>

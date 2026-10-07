@@ -17,6 +17,8 @@ from typing import Any
 
 PACKAGE_NAME = "slinky-lab-validation-v0.1.0"
 ABSOLUTE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
+EXCLUDED_SUFFIXES = {".avi", ".gif", ".jpeg", ".jpg", ".mov", ".mp4", ".png", ".svg", ".webm"}
+EXCLUDED_NAMES = {"native-log.txt", "process.log"}
 
 
 def _sha256(path: Path) -> str:
@@ -72,11 +74,20 @@ def _path_is_within(path: Path, parent: Path) -> bool:
 def _reported_status(source: Path, fallback: str = "reported") -> str:
     value = json.loads(source.read_text(encoding="utf-8"))
     summary = value.get("summary")
-    if value.get("passed") is True or (isinstance(summary, dict) and summary.get("status") in {"complete", "completed"}):
+    status = value.get("status")
+    if "passed" in value:
+        return "passed" if value.get("passed") is True else "failed" if value.get("passed") is False else fallback
+    if status in {"passed", "success"} or (isinstance(summary, dict) and summary.get("status") in {"passed", "success"}):
         return "passed"
-    if value.get("passed") is False:
+    if status in {"failed", "error"} or (isinstance(summary, dict) and summary.get("status") in {"failed", "error"}):
         return "failed"
+    if status in {"complete", "completed"} or (isinstance(summary, dict) and summary.get("status") in {"complete", "completed"}):
+        return "execution_completed"
     return fallback
+
+
+def _include_report_file(source: Path) -> bool:
+    return source.is_file() and source.name.lower() not in EXCLUDED_NAMES and source.suffix.lower() not in EXCLUDED_SUFFIXES and source.suffix.lower() != ".lock" and "__pycache__" not in source.parts
 
 
 def _add_record(
@@ -92,6 +103,7 @@ def _add_record(
 ) -> None:
     packaged = []
     source_paths = []
+    source_sha256 = {}
     for source_name, destination_name in files:
         source = root / source_name
         if not source.is_file():
@@ -99,12 +111,14 @@ def _add_record(
         destination = staging / destination_name
         _copy_evidence(source, destination, root)
         source_paths.append(source_name)
+        source_sha256[source_name] = _sha256(source)
         packaged.append(destination_name)
     evidence.append({
         "id": record_id,
         "title": title,
         "status": status,
         "source_paths": source_paths,
+        "source_sha256": source_sha256,
         "packaged_paths": packaged,
         "missing_raw": missing_raw or [],
         "notes": notes,
@@ -115,7 +129,7 @@ def _files(staging: Path) -> list[Path]:
     return sorted(path for path in staging.rglob("*") if path.is_file())
 
 
-def _write_readme(staging: Path, created_at: str, evidence: list[dict[str, Any]], validation_index: dict[str, Any]) -> None:
+def _write_readme(staging: Path, created_at: str, evidence: list[dict[str, Any]], validation_index: dict[str, Any], model_version: str, engine_version: str) -> None:
     overall_acceptance = validation_index.get("overall_acceptance")
     latest_promotion_allowed = validation_index.get("latest_promotion_allowed")
     experimental_support = validation_index.get("experimental_support", "not stated")
@@ -123,7 +137,7 @@ def _write_readme(staging: Path, created_at: str, evidence: list[dict[str, Any]]
         f"# Slinky Lab v0.1.0 验证附件",
         "",
         f"生成时间：{created_at}",
-        "引擎版本：MuJoCo 3.15.0；模型版本：helical-box-cable-v3。",
+        f"引擎版本：MuJoCo {engine_version}；模型版本：{model_version}。",
         "",
         "本包只收录仓库中已经存在的验证记录，不运行新的仿真，也不修改原始记录。JSON 中的本机绝对路径已替换为包内相对路径或移除。",
         "",
@@ -132,13 +146,14 @@ def _write_readme(staging: Path, created_at: str, evidence: list[dict[str, Any]]
         "- Drop：16/32 segments-per-turn 收敛记录、v3 quick repeat，以及 HTTP/WebSocket runtime-stream-after-lock 记录。drop 几何材料是演示假设，不能作为实测塑料彩虹圈参数。",
         "- Linux 容器 smoke 和 Linux HTTP/WebSocket runtime-stream 记录；仅收录仓库中的 JSON 证据，没有补造容器原始轨迹。",
         "- 静态标定：39 圈文献目标长度拟合记录；文献映射和几何参数假设已在 JSON 中保留。",
-        "- 楼梯：stopped、world-axis sliding、world-axis side_fall，以及 depth12 三阶 baseline 的完整 raw 证据。",
+        "- 楼梯：stopped、world-axis sliding、world-axis side_fall、depth12 baseline，以及本轮三档收敛报告和 raw 证据。",
         "",
         "## 证据边界",
         "",
         f"楼梯三阶 baseline 报告了 3 个 confirmed flips；本包收录 reports/stairs-depth-check/depth12 的真实 config/model/metadata/HDF5/frames/support 证据，并排除 process.log。楼梯记录未经过实验支持。当前 validation-results.json 状态：overall_acceptance={overall_acceptance!r}，latest_promotion_allowed={latest_promotion_allowed!r}，experimental_support={experimental_support!r}。",
         "如果 reports/stairs-validation/validation-summary.json 存在，扩展三档记录会按其实际 passed 字段收录；文件存在本身不会改变总体验收或推广状态。",
         "静态长度标定和 drop 数值收敛属于数值证据，不等于实验校准。能量中的 cable elastic energy 是独立诊断估计，不能宣称 MuJoCo d.energy 已包含 cable 插件弹性能。",
+        "参考视频和派生图未收录。source_sha256 保留原始文件哈希；JSON 路径脱敏会改变复制文件内容，MANIFEST.sha256 对应发布副本。",
         "",
         "## 文件校验",
         "",
@@ -204,6 +219,8 @@ def build_package(root: Path, release_dir: Path) -> dict[str, Any]:
     evidence: list[dict[str, Any]] = []
     validation_index_path = root / "docs" / "validation-results.json"
     validation_index = json.loads(validation_index_path.read_text(encoding="utf-8"))
+    model_version = str(validation_index.get("model_version", "unknown"))
+    engine_version = str(validation_index.get("engine_version", "3.15.0"))
     with _staging_directory(root, release_dir) as staging:
         _add_record(
             root, staging, evidence, "drop-16spt-dt6.25e-6", "Drop refined 16 segments/turn", "passed",
@@ -321,12 +338,19 @@ def build_package(root: Path, release_dir: Path) -> dict[str, Any]:
                 *[(f"reports/stairs-depth-check/depth12/{source}", f"validation/stairs/baseline-3-flips/raw/{destination}") for source, destination in baseline_files],
             ],
         )
+        _add_record(
+            root, staging, evidence, "stairs-convergence-public", "Stairs convergence public report", "failed",
+            "本轮三档楼梯收敛的精简公开报告；mesh 超时是时间预算结果，不等同于积分器不稳定。", [
+                ("docs/validation/stairs-convergence.json", "validation/stairs/convergence.json"),
+                ("docs/validation/stairs-convergence.md", "validation/stairs/convergence.md"),
+            ],
+        )
         optional_validation_dir = root / "reports" / "stairs-validation"
         optional_summary = optional_validation_dir / "validation-summary.json"
         if optional_summary.is_file():
             optional_files = []
             for source in sorted(optional_validation_dir.rglob("*")):
-                if not source.is_file() or source.name.lower() in {"process.log", "native-log.txt"} or "__pycache__" in source.parts:
+                if not _include_report_file(source):
                     continue
                 relative = source.relative_to(root).as_posix()
                 destination = f"validation/stairs/three-case-report/{source.relative_to(optional_validation_dir).as_posix()}"
@@ -338,24 +362,49 @@ def build_package(root: Path, release_dir: Path) -> dict[str, Any]:
                     f"扩展三档报告的实际 validation-summary.json；reported passed={json.loads(optional_summary.read_text(encoding='utf-8')).get('passed')!r}，文件存在本身不改变总体验收。",
                     optional_files,
                 )
+        for directory_name, record_id, title in (
+            ("literature-drop", "literature-drop", "Literature drop validation"),
+            ("arched-validation", "arched-validation", "Arched validation"),
+            ("arched-steel-probe", "arched-steel-probe", "Thin steel-assumption probe (failed)"),
+        ):
+            optional_dir = root / "reports" / directory_name
+            root_summary = optional_dir / "validation-summary.json"
+            summary_files = [root_summary] if root_summary.is_file() else [source for source in sorted(optional_dir.rglob("*.json")) if source.is_file() and "summary" in source.stem.lower()]
+            optional_files = []
+            if summary_files:
+                for source in sorted(optional_dir.rglob("*")):
+                    if not _include_report_file(source):
+                        continue
+                    relative = source.relative_to(root).as_posix()
+                    destination = f"validation/optional/{directory_name}/{source.relative_to(optional_dir).as_posix()}"
+                    optional_files.append((relative, destination))
+            if optional_files:
+                summary_status = _reported_status(summary_files[0], "reported")
+                _add_record(
+                    root, staging, evidence, record_id, title, summary_status,
+                    f"可选目录仅因存在实际 summary JSON 才收录；reported status={summary_status}，目录存在本身不改变总体验收。",
+                    optional_files,
+                )
         source_index = staging / "validation/source/validation-results.json"
         _copy_evidence(validation_index_path, source_index, root)
-        _write_readme(staging, created_at, evidence, validation_index)
+        _write_readme(staging, created_at, evidence, validation_index, model_version, engine_version)
         records = _write_hash_manifest(staging)
         _make_archive(staging, archive)
 
     manifest = {
         "package": PACKAGE_NAME,
         "created_at": created_at,
-        "engine_version": "3.15.0",
-        "model_version": "helical-box-cable-v3",
+        "engine_version": engine_version,
+        "model_version": model_version,
         "overall_acceptance": validation_index.get("overall_acceptance"),
         "latest_promotion_allowed": validation_index.get("latest_promotion_allowed"),
         "experimental_support": validation_index.get("experimental_support"),
         "evidence": evidence,
         "files": records,
+        "source_index_sha256": _sha256(validation_index_path),
+        "source_index_packaged_path": "validation/source/validation-results.json",
         "archive": {"path": archive.name, "bytes": archive.stat().st_size, "sha256": _sha256(archive)},
-        "excluded": ["local logs", "credentials", "data/", "node_modules/", "parent repository"],
+        "excluded": ["local logs", "credentials", "data/", "node_modules/", "parent repository", "reference videos", "derived images"],
     }
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return manifest

@@ -9,6 +9,7 @@ interface Props {
   metadata?: RenderMetadata;
   runKey: string;
   showContacts: boolean;
+  showEndpoints: boolean;
   showTrajectory: boolean;
   geometryMode: "boxes" | "smooth";
   cameraView: "orbit" | "front" | "side" | "top";
@@ -31,6 +32,7 @@ interface SceneState {
   trajectory: THREE.Vector3[];
   previousTime: number;
   hasFit: boolean;
+  fitKey: string;
   followTarget?: THREE.Vector3;
   resizeObserver: ResizeObserver;
   frameRequest: number;
@@ -217,12 +219,62 @@ function fitCamera(state: SceneState, frame: Frame, metadata: RenderMetadata | u
   state.hasFit = true;
 }
 
+function applyCameraView(state: SceneState, cameraView: Props["cameraView"]) {
+  if (cameraView === "orbit") return;
+  const target = state.controls.target.clone();
+  const distance = state.camera.position.distanceTo(target);
+  if (cameraView === "front") state.camera.position.copy(target).add(new THREE.Vector3(1, 0, 0.1).normalize().multiplyScalar(distance));
+  if (cameraView === "side") state.camera.position.copy(target).add(new THREE.Vector3(0, -1, 0.1).normalize().multiplyScalar(distance));
+  if (cameraView === "top") state.camera.position.copy(target).add(new THREE.Vector3(0, 0, 1).multiplyScalar(distance));
+  state.controls.update();
+}
+
+function cameraFitKey(runKey: string, metadata: RenderMetadata | undefined, config: RunConfig): string {
+  const render = effectiveMetadata(metadata);
+  return JSON.stringify([
+    runKey,
+    render?.model_version || "preview",
+    render?.segment_count || 0,
+    render?.static_geoms?.length || 0,
+    config.scenario,
+    config.material.turns,
+    config.material.radius,
+    config.material.pitch,
+    config.material.strip_width,
+    config.material.strip_thickness,
+    config.scene.step_count,
+    config.scene.step_depth,
+    config.scene.step_height,
+    config.scene.step_width,
+  ]);
+}
+
 function frameCenter(frame: Frame): THREE.Vector3 | undefined {
   if (!frame.positions.length) return undefined;
   return frame.positions.reduce((center, point) => center.add(new THREE.Vector3(point[0], point[1], point[2])), new THREE.Vector3()).multiplyScalar(1 / frame.positions.length);
 }
 
-export function SceneView({ config, frame, metadata, runKey, showContacts, showTrajectory, geometryMode, cameraView, followCamera, onCameraViewChange }: Props) {
+function endpointMarkerGroup(frame: Frame, metadata: RenderMetadata | undefined, config: RunConfig): THREE.Points | null {
+  if (frame.positions.length < 2) return null;
+  const render = effectiveMetadata(metadata);
+  const first = new THREE.Vector3(frame.positions[0][0], frame.positions[0][1], frame.positions[0][2]);
+  const lastIndex = frame.positions.length - 1;
+  const last = new THREE.Vector3(frame.positions[lastIndex][0], frame.positions[lastIndex][1], frame.positions[lastIndex][2]);
+  const firstAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(toQuaternion(frame.quaternions[0])).normalize();
+  const lastAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(toQuaternion(frame.quaternions[lastIndex])).normalize();
+  const firstSize = getHalfSize(render, 0, config);
+  const lastSize = getHalfSize(render, lastIndex, config);
+  first.addScaledVector(firstAxis, -firstSize.x);
+  last.addScaledVector(lastAxis, lastSize.x);
+  const positions = new Float32Array([...first.toArray(), ...last.toArray()]);
+  const colors = new Float32Array([...new THREE.Color("#ffffff").toArray(), ...new THREE.Color("#ff8eaf").toArray()]);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  return new THREE.Points(geometry, new THREE.PointsMaterial({ vertexColors: true, size: 0.012, sizeAttenuation: true }));
+}
+
+export function SceneView({ config, frame, metadata, runKey, showContacts, showEndpoints, showTrajectory, geometryMode, cameraView, followCamera, onCameraViewChange }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState>();
   const [ready, setReady] = useState(false);
@@ -270,7 +322,7 @@ export function SceneView({ config, frame, metadata, runKey, showContacts, showT
       renderer.setSize(width, height, false);
     });
     resizeObserver.observe(mount);
-    const state: SceneState = { scene, camera, renderer, controls, staticObjects, dynamicObjects, overlays, dynamicMode: "boxes", trajectory: [], previousTime: -1, hasFit: false, resizeObserver, frameRequest: 0 };
+    const state: SceneState = { scene, camera, renderer, controls, staticObjects, dynamicObjects, overlays, dynamicMode: "boxes", trajectory: [], previousTime: -1, hasFit: false, fitKey: "", resizeObserver, frameRequest: 0 };
     const loop = () => {
       controls.update();
       renderer.render(scene, camera);
@@ -305,17 +357,22 @@ export function SceneView({ config, frame, metadata, runKey, showContacts, showT
     state.previousTime = -1;
     state.followTarget = undefined;
     state.hasFit = false;
+    state.fitKey = "";
   }, [runKey, ready]);
 
   useEffect(() => {
     const state = stateRef.current;
     if (!state || !ready) return;
+    const nextFitKey = cameraFitKey(runKey, metadata, config);
+    if (state.fitKey === nextFitKey) return;
+    state.fitKey = nextFitKey;
     clearGroup(state.staticObjects);
     renderStaticGeoms(state.staticObjects, metadata, config);
     state.followTarget = undefined;
     state.hasFit = false;
     fitCamera(state, frame, metadata, config);
-  }, [metadata, config.scenario, config.scene.step_count, config.scene.step_depth, config.scene.step_height, config.scene.step_width, runKey, ready]);
+    applyCameraView(state, cameraView);
+  }, [metadata, config, runKey, cameraView, ready]);
 
   useEffect(() => {
     const state = stateRef.current;
@@ -374,6 +431,10 @@ export function SceneView({ config, frame, metadata, runKey, showContacts, showT
       contactGeometry.setAttribute("position", new THREE.BufferAttribute(contactPositions, 3));
       state.overlays.add(new THREE.Points(contactGeometry, new THREE.PointsMaterial({ color: "#ffffff", size: 0.009, sizeAttenuation: true })));
     }
+    if (showEndpoints) {
+      const markers = endpointMarkerGroup(frame, metadata, config);
+      if (markers) state.overlays.add(markers);
+    }
     if (showTrajectory && frame.positions.length > 0) {
       const center = frameCenter(frame);
       if (!center) return;
@@ -382,27 +443,28 @@ export function SceneView({ config, frame, metadata, runKey, showContacts, showT
       state.previousTime = frame.time;
       if (state.trajectory.length > 1) state.overlays.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(state.trajectory), new THREE.LineBasicMaterial({ color: "#fff1a8", transparent: true, opacity: 0.8 })));
     }
-  }, [config, frame, metadata, geometryMode, showContacts, showTrajectory, followCamera, ready]);
+  }, [config, frame, metadata, geometryMode, showContacts, showEndpoints, showTrajectory, followCamera, ready]);
 
   useEffect(() => {
     const state = stateRef.current;
     if (!state || !ready || cameraView === "orbit") return;
-    const target = state.controls.target.clone();
-    const distance = state.camera.position.distanceTo(target);
-    if (cameraView === "front") state.camera.position.copy(target).add(new THREE.Vector3(0, -1, 0.1).normalize().multiplyScalar(distance));
-    if (cameraView === "side") state.camera.position.copy(target).add(new THREE.Vector3(1, 0, 0.1).normalize().multiplyScalar(distance));
-    if (cameraView === "top") state.camera.position.copy(target).add(new THREE.Vector3(0, 0, 1).multiplyScalar(distance));
-    state.controls.update();
+    applyCameraView(state, cameraView);
   }, [cameraView, ready]);
 
   const timeLabel = `${frame.time.toFixed(3)} s`;
   const physicalVersion = metadata?.engine_version || metadata?.mujoco_version;
   const physical = Boolean(physicalVersion && physicalVersion !== "none");
+  const initialPose = config.scene.initial_pose ?? "tilted";
+  const previewBadge = !physical && initialPose === "arched"
+    ? "拱形初态需在线模型生成 · 当前仅为通用几何预览（未运行物理仿真）"
+    : geometryMode === "smooth"
+      ? physical ? "彩虹带 · 插值表面 · MUJOCO 物理帧" : "彩虹带 · 插值表面 · 几何预览（未运行物理仿真）"
+      : physical ? "碰撞几何 · MUJOCO 物理帧" : "碰撞几何 · 几何预览（未运行物理仿真）";
   return (
     <section className="viewport-card" data-testid="scene-view">
       <div className="viewport-toolbar"><div className="viewport-title"><span className="live-dot" />三维动力学视图 <span className="unit-chip">Z ↑</span></div><div className="viewport-actions"><label className="mode-select"><span>相机</span><select value={cameraView} onChange={(event) => onCameraViewChange(event.target.value as Props["cameraView"])}><option value="orbit">轨道</option><option value="front">正面</option><option value="side">侧面</option><option value="top">俯视</option></select></label></div></div>
       <div ref={mountRef} className="scene-canvas" />
-      <div className="viewport-overlay"><span className="preview-badge">{geometryMode === "smooth" ? physical ? "彩虹带 · 插值表面 · MUJOCO 物理帧" : "彩虹带 · 插值表面 · 几何预览（未运行物理仿真）" : physical ? "碰撞几何 · MUJOCO 物理帧" : "碰撞几何 · 几何预览（未运行物理仿真）"}</span><span className="time-readout">{timeLabel}</span></div>
+      <div className="viewport-overlay"><span className="preview-badge">{previewBadge}</span><span className="time-readout">{timeLabel}</span></div>
       <div className="axis-legend"><span><i className="axis-x" />X</span><span><i className="axis-y" />Y</span><span><i className="axis-z" />Z</span></div>
     </section>
   );

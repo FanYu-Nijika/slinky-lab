@@ -83,6 +83,13 @@ jobs:
           CHECK_STATUS=$?
           docker cp slinky-test:/data/runtime-stream.json reports/runtime-stream.json
           exit "$CHECK_STATUS"
+      - name: Native arched initial geometry and short passive release
+        run: |
+          set +e
+          docker exec slinky-test python /app/scripts/validate_arched.py --output /data/arched-validation
+          CHECK_STATUS=$?
+          docker cp slinky-test:/data/arched-validation reports/arched-validation
+          exit "$CHECK_STATUS"
       - name: Container restart persistence
         run: |
           docker restart slinky-test
@@ -132,6 +139,8 @@ jobs:
           python3 scripts/container_smoke.py --url http://127.0.0.1:8000 --output reports/anonymous-pull.json
           docker exec slinky-public python /app/scripts/runtime_stream_smoke.py --output /data/public-runtime-stream.json
           docker cp slinky-public:/data/public-runtime-stream.json reports/public-runtime-stream.json
+          docker exec slinky-public python /app/scripts/validate_arched.py --output /data/public-arched-validation
+          docker cp slinky-public:/data/public-arched-validation reports/public-arched-validation
           docker image inspect "$IMAGE" --format '{{json .RepoDigests}}' > reports/public-image-digest.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()

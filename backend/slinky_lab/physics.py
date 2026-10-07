@@ -134,10 +134,12 @@ class Simulation:
         self.duration = float(config.numerics.duration)
         self._segments = config.material.turns * int(self._resolved["segments_per_turn"])
         self._height = config.material.pitch * config.material.turns
-        # A drop starts vertically.  The shared Scene schema also serves the
-        # stairs run, whose tilt is meaningful there but would silently bias a
-        # free-fall check if it were reused for the drop preset.
-        self._angle = math.radians(config.scene.tilt_deg) if config.scenario == "stairs" else 0.0
+        # The legacy stairs pose is a rigidly tilted reference helix.  An
+        # arched pose must keep the reference model vertical and put all
+        # bending into runtime qpos, otherwise qpos0 would encode the hand
+        # deformation as a stress-free shape.
+        self._angle = (math.radians(config.scene.tilt_deg)
+                       if config.scenario == "stairs" and config.scene.initial_pose == "tilted" else 0.0)
         self._offset = self._initial_offset()
         self._anchor = self._cable_endpoint()
         self._rest_vertices, self._rest_frames, self._rest_lengths = self._radial_geometry()
@@ -200,6 +202,12 @@ class Simulation:
         self._bottom_endpoint_index = -1
         self._freefall_error = float("nan")
         self._freefall_samples = 0
+        self._qpos0_reference = np.asarray(self.model.qpos0, dtype=float).copy()
+        self._initial_pose_target_vertices: np.ndarray | None = None
+        self._initial_pose_axis_targets: np.ndarray | None = None
+        self._initial_pose_clearance_targets: tuple[float, float] | None = None
+        self._initial_pose_end_segments = 0
+        self._initial_pose_diagnostics: dict[str, Any] = {}
         self._initialise_state()
 
     @property
@@ -469,6 +477,8 @@ class Simulation:
     def _initialise_state(self) -> None:
         if self.config.scenario == "drop" and int(self.model.neq):
             self.data.eq_active[0] = 1
+        if self.config.scenario == "stairs" and self.config.scene.initial_pose == "arched":
+            self._apply_arched_pose()
         root_body = self._body_ids[0]
         joint_start = int(self.model.body_jntadr[root_body])
         joint_count = int(self.model.body_jntnum[root_body])
@@ -484,6 +494,7 @@ class Simulation:
                 world_omega = np.array([0.0, self.config.scene.initial_angular_velocity, 0.0])
                 self.data.qvel[dof_start + 3:dof_start + 6] = self._rest_frames[0].T @ world_omega
         mujoco.mj_forward(self.model, self.data)
+        self._collect_initial_pose_diagnostics()
 
     def _joint_dof_count(self, joint_id: int) -> int:
         joint_type = int(self.model.jnt_type[joint_id])
@@ -492,6 +503,283 @@ class Simulation:
         if joint_type == int(mujoco.mjtJoint.mjJNT_BALL):
             return 3
         return 1
+
+    def _set_pose_qpos(self, vertices: np.ndarray, frames: np.ndarray) -> None:
+        if vertices.shape != (self._segments + 1, 3) or frames.shape != (self._segments, 3, 3):
+            raise ValueError("initial pose geometry has an invalid shape")
+        self.data.qpos[:3] = vertices[0]
+        self.data.qpos[3:7] = _matrix_to_quat(frames[0])
+        for index, body_id in enumerate(self._body_ids[1:], 1):
+            joint_id = int(self.model.body_jntadr[body_id])
+            qadr = int(self.model.jnt_qposadr[joint_id])
+            rest_relative = self._rest_frames[index - 1].T @ self._rest_frames[index]
+            desired_relative = frames[index - 1].T @ frames[index]
+            self.data.qpos[qadr:qadr + 4] = _matrix_to_quat(rest_relative.T @ desired_relative)
+        mujoco.mj_forward(self.model, self.data)
+
+    @staticmethod
+    def _fabrik_fixed_endpoints(points: np.ndarray, lengths: np.ndarray, start: int, end: int, tolerance: float) -> np.ndarray:
+        result = np.asarray(points, dtype=float).copy()
+        segment_lengths = np.asarray(lengths[start:end], dtype=float)
+        start_point = result[start].copy()
+        end_point = result[end].copy()
+        reach = float(np.linalg.norm(end_point - start_point))
+        total_length = float(np.sum(segment_lengths))
+        if not math.isfinite(reach) or not math.isfinite(total_length) or reach > total_length + tolerance:
+            raise ValueError("arched initial pose endpoints are farther apart than the available cable length")
+        fallback = end_point - start_point
+        fallback_norm = float(np.linalg.norm(fallback))
+        if fallback_norm <= 1.0e-14:
+            fallback = np.array([0.0, 0.0, 1.0], dtype=float)
+        else:
+            fallback /= fallback_norm
+        for _ in range(512):
+            result[start] = start_point
+            for index in range(start + 1, end + 1):
+                delta = result[index] - result[index - 1]
+                norm = float(np.linalg.norm(delta))
+                direction = fallback if norm <= 1.0e-14 else delta / norm
+                result[index] = result[index - 1] + segment_lengths[index - start - 1] * direction
+            result[end] = end_point
+            for index in range(end - 1, start - 1, -1):
+                delta = result[index] - result[index + 1]
+                norm = float(np.linalg.norm(delta))
+                direction = fallback if norm <= 1.0e-14 else delta / norm
+                result[index] = result[index + 1] + segment_lengths[index - start] * direction
+            result[start] = start_point
+            errors = np.abs(np.linalg.norm(np.diff(result[start:end + 1], axis=0), axis=1) - segment_lengths)
+            if float(np.max(errors, initial=0.0)) <= tolerance:
+                return result
+        raise ValueError("arched initial pose fixed-length solve did not converge")
+
+    def _apply_arched_pose(self) -> None:
+        scene = self.config.scene
+        material = self.config.material
+        segments_per_turn = int(self._resolved["segments_per_turn"])
+        end_segments = int(scene.arch_end_turns) * segments_per_turn
+        if self._segments <= 2 * end_segments + 1:
+            raise ValueError("arched initial pose needs a non-empty middle cable region")
+        half_span = 0.5 * float(scene.step_depth)
+        if half_span <= float(material.radius) + 0.5 * float(material.strip_width):
+            raise ValueError("arched initial pose is too tight for the coil radius and strip width")
+        rise = float(scene.arch_rise if scene.arch_rise is not None else scene.step_depth * 0.5)
+        first_top = float(scene.step_height * scene.step_count)
+        last_top = float(scene.step_height * (scene.step_count - 1))
+        first_clearance_target = 0.0002
+        last_clearance_target = float(scene.arch_free_clearance)
+        x0 = float(scene.step_depth) * 0.5 + float(scene.launch_offset)
+        x1 = x0 + float(scene.step_depth)
+        flip = _rotation_y(math.pi)
+        reference = np.asarray(self._rest_vertices, dtype=float)
+        half_sizes = np.asarray(self._half_sizes, dtype=float)
+
+        def terminal_bottom_offset(indices: range, transform: np.ndarray, endpoint: np.ndarray) -> float:
+            values = []
+            for index in indices:
+                frame = transform @ self._rest_frames[index]
+                center = transform @ (reference[index] - endpoint) + frame[:, 0] * (self._rest_lengths[index] * 0.5)
+                extent = float(np.sum(np.abs(frame[2, :]) * half_sizes[index]))
+                values.append(float(center[2] - extent))
+            return float(min(values))
+
+        first_bottom_offset = terminal_bottom_offset(range(0, end_segments), np.eye(3), reference[0])
+        last_bottom_offset = terminal_bottom_offset(range(self._segments - end_segments, self._segments), flip, reference[-1])
+        first_endpoint_z = first_top + first_clearance_target - first_bottom_offset
+        last_endpoint_z = last_top + last_clearance_target - last_bottom_offset
+        first_axis_target = np.array([x0, 0.0, first_endpoint_z], dtype=float)
+        last_axis_target = np.array([x1, 0.0, last_endpoint_z], dtype=float)
+        # The first reference node is one radius along +N from the coil axis;
+        # after the 180-degree tail turn the last node is one radius along -N.
+        # Targeting the axis centres keeps complete terminal turns over the
+        # stair treads instead of placing only a material endpoint at centre.
+        first_target = first_axis_target + np.array([material.radius, 0.0, 0.0], dtype=float)
+        last_target = last_axis_target - np.array([material.radius, 0.0, 0.0], dtype=float)
+        target = np.empty_like(reference)
+        target[:end_segments + 1] = first_target + (reference[:end_segments + 1] - reference[0])
+        target[self._segments - end_segments:] = last_target + (reference[self._segments - end_segments:] - reference[-1]) @ flip.T
+        middle_start_z = first_endpoint_z + float(reference[end_segments, 2] - reference[0, 2])
+        middle_end_z = last_endpoint_z + float((flip @ (reference[self._segments - end_segments] - reference[-1]))[2])
+
+        def axis_frame(value: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+            value = float(np.clip(value, 0.0, 1.0))
+            x = x0 + half_span * (1.0 - math.cos(math.pi * value))
+            z = middle_start_z + (middle_end_z - middle_start_z) * (3.0 * value**2 - 2.0 * value**3) + rise * math.sin(math.pi * value)
+            tangent = np.array([
+                half_span * math.pi * math.sin(math.pi * value),
+                0.0,
+                (middle_end_z - middle_start_z) * 6.0 * value * (1.0 - value) + rise * math.pi * math.cos(math.pi * value),
+            ], dtype=float)
+            tangent_norm = float(np.linalg.norm(tangent))
+            if tangent_norm <= 1.0e-14:
+                raise ValueError("arched initial pose has a zero arch-axis tangent")
+            tangent /= tangent_norm
+            binormal = np.array([0.0, 1.0, 0.0], dtype=float)
+            radial = np.cross(binormal, tangent)
+            radial_norm = float(np.linalg.norm(radial))
+            if radial_norm <= 1.0e-14:
+                raise ValueError("arched initial pose cannot construct a radial frame")
+            radial /= radial_norm
+            return np.array([x, 0.0, z], dtype=float), tangent, radial
+
+        theta = np.linspace(0.0, 2.0 * math.pi * material.turns, self._segments + 1)
+        middle_start = end_segments
+        middle_end = self._segments - end_segments
+        middle_span = float(middle_end - middle_start)
+        for index in range(middle_start + 1, middle_end):
+            value = (index - middle_start) / middle_span
+            axis, _, radial = axis_frame(value)
+            target[index] = axis + material.radius * (math.cos(theta[index]) * radial + math.sin(theta[index]) * np.array([0.0, 1.0, 0.0]))
+        length_tolerance = max(1.0e-10, float(np.min(self._rest_lengths)) * 1.0e-7)
+        target = self._fabrik_fixed_endpoints(target, self._rest_lengths, middle_start, middle_end, length_tolerance)
+
+        frames = np.empty((self._segments, 3, 3), dtype=float)
+        for index in range(self._segments):
+            if index < end_segments:
+                frames[index] = self._rest_frames[index]
+                continue
+            if index >= self._segments - end_segments:
+                frames[index] = flip @ self._rest_frames[index]
+                continue
+            tangent = target[index + 1] - target[index]
+            tangent_norm = float(np.linalg.norm(tangent))
+            if tangent_norm <= 1.0e-14:
+                raise ValueError("arched initial pose produced a zero-length middle segment")
+            tangent /= tangent_norm
+            value = (index + 0.5 - middle_start) / middle_span
+            _, _, radial = axis_frame(value)
+            width = -(math.cos(0.5 * (theta[index] + theta[index + 1])) * radial + math.sin(0.5 * (theta[index] + theta[index + 1])) * np.array([0.0, 1.0, 0.0]))
+            width -= tangent * float(np.dot(width, tangent))
+            width_norm = float(np.linalg.norm(width))
+            if width_norm <= 1.0e-14:
+                raise ValueError("arched initial pose produced a degenerate section frame")
+            width /= width_norm
+            normal = np.cross(tangent, width)
+            normal_norm = float(np.linalg.norm(normal))
+            if normal_norm <= 1.0e-14:
+                raise ValueError("arched initial pose produced a degenerate normal frame")
+            normal /= normal_norm
+            width = np.cross(normal, tangent)
+            frames[index] = np.column_stack((tangent, width, normal))
+
+        self._initial_pose_target_vertices = target.copy()
+        self._initial_pose_axis_targets = np.vstack((first_axis_target, last_axis_target))
+        self._initial_pose_clearance_targets = (first_clearance_target, last_clearance_target)
+        self._initial_pose_end_segments = end_segments
+        self._set_pose_qpos(target, frames)
+        self.data.qvel[:] = 0.0
+        actual_body_nodes = np.asarray(self.data.xpos, dtype=float)[self._body_ids]
+        actual_last_node = np.asarray(self.data.site_xpos, dtype=float)[self._endpoint_ids[1]][None, :]
+        actual_nodes = np.concatenate((actual_body_nodes, actual_last_node), axis=0)
+        actual_link_errors = np.abs(np.linalg.norm(np.diff(actual_nodes, axis=0), axis=1) - self._rest_lengths)
+        fk_tolerance = max(1.0e-8, float(np.min(self._rest_lengths)) * 1.0e-5)
+        if float(np.max(actual_link_errors, initial=0.0)) > fk_tolerance:
+            raise ValueError("arched initial pose FK changed a cable segment length beyond tolerance")
+        if float(np.max(np.linalg.norm(actual_nodes - target, axis=1), initial=0.0)) > fk_tolerance:
+            raise ValueError("arched initial pose FK did not realize the requested nodes within tolerance")
+        matrices = np.asarray(self.data.geom_xmat[self._geom_ids], dtype=float).reshape(-1, 3, 3)
+        positions = np.asarray(self.data.geom_xpos[self._geom_ids], dtype=float)
+        half_sizes = np.asarray(self._half_sizes, dtype=float)
+        z_extent = np.sum(np.abs(matrices[:, 2, :]) * half_sizes, axis=1)
+        x_extent = np.sum(np.abs(matrices[:, 0, :]) * half_sizes, axis=1)
+        bottoms = positions[:, 2] - z_extent
+        x_mins = positions[:, 0] - x_extent
+        x_maxs = positions[:, 0] + x_extent
+        first_slice = slice(0, end_segments)
+        last_slice = slice(self._segments - end_segments, self._segments)
+        first_clearance = float(np.min(bottoms[first_slice]) - first_top)
+        last_clearance = float(np.min(bottoms[last_slice]) - last_top)
+        first_x_range = (float(np.min(x_mins[first_slice])), float(np.max(x_maxs[first_slice])))
+        last_x_range = (float(np.min(x_mins[last_slice])), float(np.max(x_maxs[last_slice])))
+        if first_clearance < first_clearance_target - fk_tolerance or last_clearance < last_clearance_target - fk_tolerance:
+            raise ValueError("arched initial pose terminal turns penetrate a stair tread or leave no free-end clearance")
+        if first_x_range[0] < -fk_tolerance or first_x_range[1] > float(scene.step_depth) + fk_tolerance:
+            raise ValueError("arched initial pose first terminal turn does not fit stair_0")
+        if last_x_range[0] < float(scene.step_depth) - fk_tolerance or last_x_range[1] > 2.0 * float(scene.step_depth) + fk_tolerance:
+            raise ValueError("arched initial pose last terminal turn does not fit stair_1")
+
+    def _collect_initial_pose_diagnostics(self) -> None:
+        mujoco.mj_forward(self.model, self.data)
+        actual_body_nodes = np.asarray(self.data.xpos, dtype=float)[self._body_ids]
+        actual_last_node = np.asarray(self.data.site_xpos, dtype=float)[self._endpoint_ids[1]][None, :]
+        actual_nodes = np.concatenate((actual_body_nodes, actual_last_node), axis=0)
+        actual_links = np.linalg.norm(np.diff(actual_nodes, axis=0), axis=1)
+        link_errors = actual_links - self._rest_lengths
+        endpoint_actual = np.asarray(self.data.site_xpos[self._endpoint_ids], dtype=float)
+        target = self._initial_pose_target_vertices
+        target_nodes = [] if target is None else target.tolist()
+        endpoint_target = [] if target is None else target[[0, -1]].tolist()
+        endpoint_errors = [] if target is None else np.linalg.norm(endpoint_actual - target[[0, -1]], axis=1).tolist()
+        matrices = np.asarray(self.data.geom_xmat[self._geom_ids], dtype=float).reshape(-1, 3, 3)
+        positions = np.asarray(self.data.geom_xpos[self._geom_ids], dtype=float)
+        half_sizes = np.asarray(self._half_sizes, dtype=float)
+        z_extent = np.sum(np.abs(matrices[:, 2, :]) * half_sizes, axis=1)
+        x_extent = np.sum(np.abs(matrices[:, 0, :]) * half_sizes, axis=1)
+        bottoms = positions[:, 2] - z_extent
+        x_mins = positions[:, 0] - x_extent
+        x_maxs = positions[:, 0] + x_extent
+        end_count = self._initial_pose_end_segments
+        if end_count:
+            first_slice = slice(0, end_count)
+            last_slice = slice(self._segments - end_count, self._segments)
+            first_clearance = float(np.min(bottoms[first_slice]) - self.config.scene.step_height * self.config.scene.step_count)
+            last_clearance = float(np.min(bottoms[last_slice]) - self.config.scene.step_height * (self.config.scene.step_count - 1))
+            first_x_range = [float(np.min(x_mins[first_slice])), float(np.max(x_maxs[first_slice]))]
+            last_x_range = [float(np.min(x_mins[last_slice])), float(np.max(x_maxs[last_slice]))]
+        else:
+            first_clearance = None
+            last_clearance = None
+            first_x_range = None
+            last_x_range = None
+        stair_contact_count = 0
+        self_contact_count = 0
+        initial_penetration = 0.0
+        for index in range(int(self.data.ncon)):
+            contact = self.data.contact[index]
+            initial_penetration = max(initial_penetration, max(0.0, -float(contact.dist)))
+            if int(contact.geom[0]) in self._stair_geom_ids or int(contact.geom[1]) in self._stair_geom_ids:
+                stair_contact_count += 1
+            elif int(contact.geom[0]) in self._cable_geom_to_material and int(contact.geom[1]) in self._cable_geom_to_material:
+                self_contact_count += 1
+        passive_force = np.asarray(self.data.qfrc_passive, dtype=float)
+        acceleration = np.asarray(self.data.qacc, dtype=float)
+        resolved = "arched" if target is not None else ("tilted" if self.config.scenario == "stairs" else "drop_reference")
+        equilibrium_status = "manual_non_equilibrium" if target is not None else ("drop_hold_pending" if self.config.scenario == "drop" else "reference_pose")
+        axis_targets = [] if self._initial_pose_axis_targets is None else self._initial_pose_axis_targets.tolist()
+        clearance_targets = [] if self._initial_pose_clearance_targets is None else list(self._initial_pose_clearance_targets)
+        self._initial_pose_diagnostics = {
+            "requested": self.config.scene.initial_pose,
+            "resolved": resolved,
+            "target_stair_indices": [0, 1] if target is not None else [],
+            "target_axis_centres": axis_targets,
+            "target_clearances_m": clearance_targets,
+            "target_nodes": target_nodes,
+            "actual_nodes": actual_nodes.tolist() if target is not None else [],
+            "target_endpoints": endpoint_target,
+            "actual_endpoints": endpoint_actual.tolist(),
+            "endpoint_errors_m": endpoint_errors,
+            "max_endpoint_error_m": float(max(endpoint_errors, default=0.0)),
+            "max_link_error_m": float(np.max(np.abs(link_errors), initial=0.0)),
+            "rms_link_error_m": float(np.sqrt(np.mean(link_errors**2))) if link_errors.size else 0.0,
+            "qpos0_unchanged": bool(np.array_equal(np.asarray(self.model.qpos0, dtype=float), self._qpos0_reference)),
+            "initial_elastic_energy_estimate": float(self._elastic_energy_estimate()),
+            "initial_passive_force_max": float(np.max(np.abs(passive_force), initial=0.0)),
+            "initial_acceleration_max": float(np.max(np.abs(acceleration), initial=0.0)),
+            "initial_contact_count": int(self.data.ncon),
+            "initial_stair_contact_count": stair_contact_count,
+            "initial_self_contact_count": self_contact_count,
+            "initial_max_penetration_m": initial_penetration,
+            "actual_first_clearance_m": first_clearance,
+            "actual_free_end_clearance_m": last_clearance,
+            "first_end_x_range_m": first_x_range,
+            "last_end_x_range_m": last_x_range,
+            "first_end_within_stair0": bool(first_x_range is not None and first_x_range[0] >= -1.0e-6 and first_x_range[1] <= self.config.scene.step_depth + 1.0e-6),
+            "last_end_within_stair1": bool(last_x_range is not None and last_x_range[0] >= self.config.scene.step_depth - 1.0e-6 and last_x_range[1] <= 2.0 * self.config.scene.step_depth + 1.0e-6),
+            "equilibrium_status": equilibrium_status,
+            "equality_active_count": int(np.count_nonzero(np.asarray(self.data.eq_active, dtype=int))),
+            "actuator_count": int(self.model.nu),
+            "applied_force_max": float(np.max(np.abs(np.asarray(self.data.qfrc_applied, dtype=float)), initial=0.0)),
+            "release_driving_note": "initial pose is written to data.qpos; no persistent equality, actuator, or applied force is used",
+        }
 
     @staticmethod
     def _is_cancelled(callback: CancelCallback | None) -> bool:
@@ -592,14 +880,7 @@ class Simulation:
         vertices, frames = guess
         vertices = vertices[::-1].copy()
         frames = frames[::-1].copy() @ np.diag([-1.0, 1.0, -1.0])
-        self.data.qpos[:3] = vertices[0]
-        self.data.qpos[3:7] = _matrix_to_quat(frames[0])
-        for index, body_id in enumerate(self._body_ids[1:], 1):
-            joint_id = int(self.model.body_jntadr[body_id])
-            qadr = int(self.model.jnt_qposadr[joint_id])
-            rest_relative = self._rest_frames[index - 1].T @ self._rest_frames[index]
-            desired_relative = frames[index - 1].T @ frames[index]
-            self.data.qpos[qadr:qadr + 4] = _matrix_to_quat(rest_relative.T @ desired_relative)
+        self._set_pose_qpos(vertices, frames)
         self.data.qvel[:] = 0
         mujoco.mj_forward(self.model, self.data)
         self._initial_guess_used = True
@@ -996,6 +1277,7 @@ class Simulation:
             "step_events": self._step_events,
             "movement_classification": self._movement_classification(),
             "support_diagnostics": self._gait.summary(),
+            "initial_pose_diagnostics": self._initial_pose_diagnostics,
             "quiet_duration_s": self._quiet_duration,
             "research_metric_definitions": {
                 "static_equilibrium_length": "vertical distance between material endpoints immediately before release or after stairs placement",
@@ -1047,6 +1329,7 @@ class Simulation:
             "rest_shape": {"curve": "cos(s) sin(s) s", "turns": self.config.material.turns, "height": self._height,
                            "radius": self.config.material.radius, "argument_speed": 2 * self.config.material.turns, "flat": False,
                            "tilt_deg": math.degrees(self._angle)},
+            "initial_pose_diagnostics": self._initial_pose_diagnostics,
             "static_geoms": static_geoms,
             "stairs": [geom for geom in static_geoms if geom["name"].startswith("stair_")],
             "energy_diagnostics": {

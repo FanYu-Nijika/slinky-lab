@@ -1,0 +1,97 @@
+{
+  "id": "stairs-walking-convergence-2026-10-07",
+  "title": "楼梯三档离散收敛实测报告",
+  "created_at": "2026-10-07T07:52:39.003271+00:00",
+  "passed": false,
+  "model_version": "helical-box-cable-v3",
+  "engine_version": "3.15.0",
+  "source": {
+    "source_commit_sha": "246f5f3f89a3d8b76da5bb2f6581b0020d230416",
+    "workflow_url": "https://github.com/FanYu-Nijika/slinky-lab/actions/runs/37580189844",
+    "checker_path": "scripts/validate_stairs.py",
+    "checker_revision": "working-tree, uncommitted",
+    "checker_sha256": "61f68fddbf3df73df72fc7ac2146423d03c5660341b7ef7b24ef9b58e5222944",
+    "recorded_recheck_checker_sha256": "378049475896353d28a56b8463d1e51a3af345bed5cb47b772fbe5397aa2ac1e",
+    "artifact_hash_verification": "passed",
+    "artifact_hash_count": 33
+  },
+  "criterion": {
+    "duration_s": 2.4,
+    "required_sequence": ["last", "first", "last"],
+    "required_cases": ["baseline", "half_dt", "mesh"],
+    "support_time_relative_tolerance": 0.05,
+    "rule": "三例均需完整、无警告、有限、未超时，并保持前三阶端圈支撑序列与支撑时刻在5%内。"
+  },
+  "cases": [
+    {
+      "name": "baseline",
+      "status": "completed",
+      "wall_seconds": 576.176,
+      "simulation_time_s": 2.400000000001076,
+      "segments_per_turn": 8,
+      "timestep_s": 0.00005,
+      "confirmed_flip_count": 3,
+      "confirmed_endpoint_sequence": ["last", "first", "last"],
+      "verified_steps": [1, 2, 3],
+      "support_times_s": [0.6493499999999367, 1.058200000000021, 1.6821000000013375],
+      "warning_detected": false,
+      "nonfinite_detected": false,
+      "timeout_detected": false,
+      "max_penetration_m": 0.00036864083709816915
+    },
+    {
+      "name": "half_dt",
+      "status": "completed",
+      "wall_seconds": 941.017,
+      "simulation_time_s": 2.400024999997741,
+      "segments_per_turn": 8,
+      "timestep_s": 0.000025,
+      "confirmed_flip_count": 4,
+      "confirmed_endpoint_sequence": ["last", "first", "last", "first"],
+      "verified_steps": [1, 2, 3, 4],
+      "support_times_s": [0.6533500000002727, 0.989475000000982, 1.6301249999995355],
+      "warning_detected": false,
+      "nonfinite_detected": false,
+      "timeout_detected": false,
+      "max_penetration_m": 0.0011641772431382764
+    },
+    {
+      "name": "mesh",
+      "status": "timeout",
+      "wall_seconds": 3600.373,
+      "wall_budget_seconds": 3600.0,
+      "simulation_time_s": 0.8025874999997968,
+      "segments_per_turn": 16,
+      "timestep_s": 0.0000125,
+      "confirmed_flip_count": 1,
+      "confirmed_endpoint_sequence": ["last"],
+      "verified_steps": [1],
+      "support_times_s": [0.6288625000002017],
+      "warning_detected": false,
+      "nonfinite_detected": false,
+      "timeout_detected": true,
+      "max_penetration_m": 0.0001992075972683984
+    }
+  ],
+  "comparisons": {
+    "half_dt_sequence_matches": true,
+    "half_dt_second_support_relative_change": 0.06494518994428043,
+    "half_dt_second_support_relative_change_percent": 6.494519,
+    "half_dt_support_time_check_passed": false,
+    "mesh_sequence_matches": false,
+    "mesh_full_duration_completed": false
+  },
+  "conclusion": {
+    "passed": false,
+    "status": "not_converged",
+    "reasons": [
+      "half_dt 第二阶支撑时刻变化6.495%，超过5%标准。",
+      "mesh 在0.8025875 s时达到3600 s墙钟预算，仅观察到1次支撑，未完成2.4 s。"
+    ],
+    "timeout_interpretation": "mesh 的 timeout 是时间预算结果；该记录 warning_detected=false、nonfinite_detected=false，不将超时等同于数值不稳定，也不把它当作完成的收敛证据。"
+  },
+  "limits": [
+    "参数是宏观演示几何，尚无独立实验支持。",
+    "本报告只收录 JSON/Markdown 数值证据，不包含参考视频或派生图。"
+  ]
+}

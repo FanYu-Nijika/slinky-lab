@@ -33,6 +33,7 @@ export default function App() {
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
   const [showContacts, setShowContacts] = useState(false);
+  const [showEndpoints, setShowEndpoints] = useState(false);
   const [showTrajectory, setShowTrajectory] = useState(true);
   const [geometryMode, setGeometryMode] = useState<"boxes" | "smooth">("smooth");
   const [cameraView, setCameraView] = useState<"orbit" | "front" | "side" | "top">("orbit");
@@ -129,8 +130,15 @@ export default function App() {
           const message = JSON.parse(event.data) as { type: string; data?: unknown };
           const data = (message.data || {}) as Record<string, unknown>;
           if (message.type === "status") {
-            const nextStatus = (data.status || message.data) as string;
-            if (nextStatus) setStatus(nextStatus);
+            const statusRun = (data.run || data._run_response || (data.run_id && data.config ? data : undefined)) as RunResult | undefined;
+            if (statusRun?.run_id) {
+              setSelectedRun(statusRun);
+              setRuns((current) => [statusRun, ...current.filter((item) => item.run_id !== statusRun.run_id)]);
+              setStatus(statusRun.status);
+            } else {
+              const nextStatus = (data.status || message.data) as string;
+              if (nextStatus) setStatus(nextStatus);
+            }
           } else if (message.type === "metadata") {
             setMetadata((data.metadata || data) as RenderMetadata);
           } else if (message.type === "frame") {
@@ -141,6 +149,12 @@ export default function App() {
             setStatus(result.status);
             if (result.summary) setRuns((current) => current.map((item) => item.run_id === result.run_id ? result : item));
           } else if (message.type === "error") {
+            const errorRun = data.run as RunResult | undefined;
+            if (errorRun?.run_id) {
+              setSelectedRun(errorRun);
+              setRuns((current) => [errorRun, ...current.filter((item) => item.run_id !== errorRun.run_id)]);
+              setStatus(errorRun.status);
+            }
             setError(String(data.error || data.message || "计算服务返回错误"));
           }
         } catch {
@@ -200,6 +214,9 @@ export default function App() {
   }, [isPlaying, speed, currentIndex, frames]);
 
   const changeConfig = (next: RunConfig) => {
+    const previousPose = config.scene.initial_pose ?? "tilted";
+    const nextPose = next.scene.initial_pose ?? "tilted";
+    if (previousPose !== nextPose && nextPose === "arched") setCameraView("side");
     configEditedRef.current = true;
     setConfig(next);
     setDirty(true);
@@ -208,9 +225,15 @@ export default function App() {
   };
 
   const choosePreset = (idOrName: string) => {
-    const preset = presets.find((item) => item.id === idOrName || item.name === idOrName);
+    const cardPresetId = idOrName === "drop" ? "drop-validation" : idOrName === "stairs" ? "stairs-arched" : undefined;
+    const preset = (cardPresetId && presets.find((item) => item.id === cardPresetId))
+      || presets.find((item) => item.id === idOrName || item.name === idOrName);
     if (preset?.config) {
       changeConfig(cloneConfig(preset.config));
+      return;
+    }
+    if (idOrName === "drop") {
+      changeConfig(cloneConfig(DEFAULT_DROP_VALIDATION_CONFIG));
       return;
     }
     const next = cloneConfig(DEFAULT_CONFIG);
@@ -341,8 +364,8 @@ export default function App() {
       <main className={`workspace ${leftCollapsed ? "left-hidden" : ""} ${rightCollapsed ? "right-hidden" : ""}`}>
         <ParameterPanel config={config} presets={presets} onChange={changeConfig} onPreset={choosePreset} collapsed={leftCollapsed} />
         <section className="center-column">
-          <div className="center-heading"><div><span className="eyebrow">{config.scenario === "stairs" ? "SCENARIO / STAIRS" : "SCENARIO / DROP"}</span><h1>{config.scenario === "stairs" ? "翻转下楼梯" : "悬挂下落"}<span className="model-pill">{config.numerics.profile === "fine" ? "FINE" : "PREVIEW"}</span></h1></div><div className="view-toggles"><button title="由真实帧位置与截面姿态插值的矩形带面" className={geometryMode === "smooth" ? "active" : ""} onClick={() => setGeometryMode("smooth")}>⌁ 彩虹带</button><button title="显示 MuJoCo 真实碰撞盒体" className={geometryMode === "boxes" ? "active" : ""} onClick={() => setGeometryMode("boxes")}>▦ 碰撞几何</button><button className={showContacts ? "active" : ""} onClick={() => setShowContacts((value) => !value)}>⊙ 接触点</button><button className={showTrajectory ? "active" : ""} onClick={() => setShowTrajectory((value) => !value)}>⌁ 轨迹</button><button title="沿质心平移相机，保持下落主体可见" className={followCamera ? "active" : ""} onClick={() => setFollowCamera((value) => !value)}>◎ 跟随质心</button></div></div>
-          <SceneView config={config} frame={currentFrame} metadata={renderMetadata} runKey={selectedId || "preview"} showContacts={showContacts} showTrajectory={showTrajectory} geometryMode={geometryMode} cameraView={cameraView} followCamera={followCamera} onCameraViewChange={setCameraView} />
+          <div className="center-heading"><div><span className="eyebrow">{config.scenario === "stairs" ? "SCENARIO / STAIRS" : "SCENARIO / DROP"}</span><h1>{config.scenario === "stairs" ? "翻转下楼梯" : "悬挂下落"}<span className="model-pill">{config.numerics.profile === "fine" ? "FINE" : "PREVIEW"}</span></h1></div><div className="view-toggles"><button title="由真实帧位置与截面姿态插值的矩形带面" className={geometryMode === "smooth" ? "active" : ""} onClick={() => setGeometryMode("smooth")}>⌁ 彩虹带</button><button title="显示 MuJoCo 真实碰撞盒体" className={geometryMode === "boxes" ? "active" : ""} onClick={() => setGeometryMode("boxes")}>▦ 碰撞几何</button><button className={showContacts ? "active" : ""} onClick={() => setShowContacts((value) => !value)}>⊙ 接触点</button><button title="标记材料首端与末端，不添加物理几何" className={showEndpoints ? "active" : ""} onClick={() => setShowEndpoints((value) => !value)}>● 材料端点</button><button className={showTrajectory ? "active" : ""} onClick={() => setShowTrajectory((value) => !value)}>⌁ 轨迹</button><button title="沿质心平移相机，保持下落主体可见" className={followCamera ? "active" : ""} onClick={() => setFollowCamera((value) => !value)}>◎ 跟随质心</button></div></div>
+          <SceneView config={config} frame={currentFrame} metadata={renderMetadata} runKey={selectedId || "preview"} showContacts={showContacts} showEndpoints={showEndpoints} showTrajectory={showTrajectory} geometryMode={geometryMode} cameraView={cameraView} followCamera={followCamera} onCameraViewChange={setCameraView} />
           <Timeline frames={frames} currentIndex={currentIndex} status={status} hasRun={Boolean(selectedId)} speed={speed} onIndexChange={(index) => { followLiveRef.current = false; setCurrentIndex(index); }} onAction={(action) => void handleCommand(action)} onReset={() => { followLiveRef.current = false; setCurrentIndex(0); setIsPlaying(false); }} onSpeedChange={setSpeed} isPlaying={isPlaying} onTogglePlayback={() => setIsPlaying((value) => !value)} />
           <ChartsPanel frames={frames} run={selectedRun} onUploadReference={uploadReferenceFile} onExportPng={(dataUrl) => saveDataUrl(dataUrl, "slinky-chart.png")} />
           <SweepPanel base={config} sweep={sweep} onStart={startSweep} />

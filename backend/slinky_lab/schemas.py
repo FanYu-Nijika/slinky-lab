@@ -38,6 +38,10 @@ class Scene(StrictModel):
     step_width: float = Field(0.3, ge=0.05, le=2)
     step_count: int = Field(6, ge=3, le=20)
     tilt_deg: float = Field(25, ge=-80, le=80)
+    initial_pose: Literal["tilted", "arched"] = "tilted"
+    arch_rise: float | None = Field(None, ge=0, le=1)
+    arch_end_turns: int = Field(2, ge=1, le=20)
+    arch_free_clearance: float = Field(0.025, ge=0, le=0.5)
     initial_angular_velocity: float = Field(0, ge=-20, le=20)
     initial_forward_velocity: float = Field(0, ge=-2, le=2)
     initial_lateral_velocity: float = Field(0, ge=-2, le=2)
@@ -76,6 +80,11 @@ class RunConfig(StrictModel):
     def bounded_mesh(self):
         if self.material.turns * self.numerics.resolved()["segments_per_turn"] > 2048:
             raise ValueError("The CPU workbench supports at most 2048 rod segments per run")
+        if self.scene.initial_pose == "arched":
+            if self.scenario != "stairs":
+                raise ValueError("initial_pose='arched' is only valid for the stairs scenario")
+            if self.material.turns < 2 * self.scene.arch_end_turns + 2:
+                raise ValueError("arched initial pose requires turns >= 2*arch_end_turns + 2")
         return self
 
 

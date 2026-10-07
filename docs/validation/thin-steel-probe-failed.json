@@ -1,0 +1,38 @@
+{
+  "schema": "slinky-lab.arched-steel-probe.conclusion.v1",
+  "status": "failed",
+  "simulation_time_s": 2.5e-05,
+  "model_version": "helical-box-cable-v4",
+  "warning_detected": true,
+  "max_penetration_m": 0.0014540032993854543,
+  "movement_classification": "sliding",
+  "first_three_endpoint_support_events": [],
+  "candidate_flip_count": 0,
+  "confirmed_flip_count": 0,
+  "candidate_endpoint_sequence": [],
+  "confirmed_endpoint_sequence": [],
+  "conclusion": "Native MuJoCo BADQACC was reported at about 0.0542 s. After automatic reset the engine clock reads 0.000025 s; the last valid exported frame is 0.04 s, and post-failure instantaneous metrics are invalid. No lower-stair sustained endpoint support or three-step gait was observed.",
+  "native_warning_times_s": [
+    0.0542,
+    0.0542
+  ],
+  "native_warning_lines": [
+    "WARNING Wed Oct  7 16:25:26 2026: Nan, Inf or huge value in QACC at DOF 153. The simulation is unstable. Time = 0.0542.",
+    "WARNING Wed Oct  7 16:25:26 2026: Nan, Inf or huge value in QACC at DOF 153. The simulation is unstable. Time = 0.0542."
+  ],
+  "last_frame_time_s": 0.039999999999999675,
+  "frame_count": 3,
+  "first_sustained_endpoint_events": [],
+  "three_step_result": "not observed",
+  "failure_clock_diagnostics": {
+    "engine_time_after_auto_reset_s": 2.5e-05,
+    "last_exported_frame_time_s": 0.039999999999999675,
+    "warning_reported_time_s": 0.0542,
+    "post_failure_instantaneous_metrics_valid": false,
+    "interpretation": "MuJoCo warning caused an automatic/reset clock state; the reset engine time and instantaneous metrics must not be interpreted as physical post-failure dynamics."
+  },
+  "engine_time_after_auto_reset_s": 2.5e-05,
+  "last_exported_frame_time_s": 0.039999999999999675,
+  "warning_reported_time_s": 0.0542,
+  "post_failure_instantaneous_metrics_valid": false
+}

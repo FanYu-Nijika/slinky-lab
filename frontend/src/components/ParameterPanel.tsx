@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Material, Numerics, RunConfig, Scene } from "../types";
+import type { InitialPose, Material, Numerics, RunConfig, Scene } from "../types";
 
 interface Props {
   config: RunConfig;
@@ -55,6 +55,9 @@ export function ParameterPanel({ config, presets, onChange, onPreset, collapsed 
   const updateMaterial = (patch: Partial<Material>) => onChange({ ...config, material: { ...config.material, ...patch } });
   const updateScene = (patch: Partial<Scene>) => onChange({ ...config, scene: { ...config.scene, ...patch } });
   const updateNumerics = (patch: Partial<Numerics>) => onChange({ ...config, numerics: { ...config.numerics, ...patch } });
+  const initialPose: InitialPose = config.scene.initial_pose ?? "tilted";
+  const archEndTurns = config.scene.arch_end_turns ?? 2;
+  const automaticArchRise = config.scene.step_depth / 2;
   const chooseProfile = (profile: Numerics["profile"]) => {
     if (profile === config.numerics.profile) return;
     const segments = config.numerics.segments_per_turn ?? (config.numerics.profile === "fine" ? 24 : 12);
@@ -111,7 +114,35 @@ export function ParameterPanel({ config, presets, onChange, onPreset, collapsed 
               <NumberField label="阶深" value={config.scene.step_depth} min={0.015} max={0.5} step={0.001} unit="m" onChange={(value) => updateScene({ step_depth: value })} />
               <NumberField label="阶宽" value={config.scene.step_width} min={0.05} max={2} step={0.01} unit="m" onChange={(value) => updateScene({ step_width: value })} />
               <NumberField label="阶梯数量" value={config.scene.step_count} min={3} max={20} step={1} unit="阶" onChange={(value) => updateScene({ step_count: value })} />
-              <NumberField label="初始倾角" value={config.scene.tilt_deg} min={-80} max={80} step={1} unit="°" onChange={(value) => updateScene({ tilt_deg: value })} />
+              <label className="field">
+                <span>起步姿态</span>
+                <select className="select-input" aria-label="起步姿态" value={initialPose} onChange={(event) => updateScene({ initial_pose: event.target.value as InitialPose })}>
+                  <option value="tilted">整体倾斜</option>
+                  <option value="arched">手动拱形释放</option>
+                </select>
+              </label>
+              {initialPose === "tilted" ? (
+                <NumberField label="初始倾角" value={config.scene.tilt_deg} min={-80} max={80} step={1} unit="°" onChange={(value) => updateScene({ tilt_deg: value })} />
+              ) : (
+                <>
+                  <label className="field">
+                    <span>拱高来源</span>
+                    <select className="select-input" aria-label="拱高来源" value={config.scene.arch_rise == null ? "auto" : "custom"} onChange={(event) => updateScene({ arch_rise: event.target.value === "auto" ? null : automaticArchRise })}>
+                      <option value="auto">自动（阶深一半）</option>
+                      <option value="custom">自定义拱高</option>
+                    </select>
+                  </label>
+                  {config.scene.arch_rise == null ? (
+                    <div className="field"><span>拱高</span><div className="field-input"><span>{automaticArchRise.toFixed(4)} m（自动）</span></div></div>
+                  ) : (
+                    <NumberField label="拱高" value={config.scene.arch_rise} min={0} max={1} step={0.001} unit="m" onChange={(value) => updateScene({ arch_rise: value })} />
+                  )}
+                  <NumberField label="两端压缩圈数" value={archEndTurns} min={1} max={Math.max(1, Math.floor((config.material.turns - 2) / 2))} step={1} unit="圈" onChange={(value) => updateScene({ arch_end_turns: value })} />
+                  <NumberField label="自由端间隙" value={config.scene.arch_free_clearance ?? 0.025} min={0} max={0.5} step={0.001} unit="m" onChange={(value) => updateScene({ arch_free_clearance: value })} />
+                  <div className="source-note" style={{ padding: "8px 0 0" }}><span className="source-dot" /><div>初始弯曲储存弹性能，放手后由动力学产生运动。拱形释放不使用初始倾角；初始速度仍按数值输入。</div></div>
+                  {config.material.turns < 2 * archEndTurns + 2 && <div className="source-note" style={{ padding: "4px 0 0" }}><span className="source-dot" /><div>当前圈数不足：至少需要 {2 * archEndTurns + 2} 圈才能容纳两端压缩圈。</div></div>}
+                </>
+              )}
               <NumberField label="初始前向速度" value={config.scene.initial_forward_velocity} min={-2} max={2} step={0.01} unit="m/s" onChange={(value) => updateScene({ initial_forward_velocity: value })} />
               <NumberField label="初始侧向速度" value={config.scene.initial_lateral_velocity ?? 0} min={-2} max={2} step={0.01} unit="m/s" onChange={(value) => updateScene({ initial_lateral_velocity: value })} />
               <NumberField label="初始角速度" value={config.scene.initial_angular_velocity} min={-20} max={20} step={0.1} unit="rad/s" onChange={(value) => updateScene({ initial_angular_velocity: value })} />

@@ -23,6 +23,7 @@ from typing import Any
 import h5py
 import numpy as np
 
+from slinky_lab import MODEL_VERSION
 from slinky_lab.physics import Simulation
 from slinky_lab.presets import get_preset
 from slinky_lab.schemas import RunConfig
@@ -35,7 +36,6 @@ CASE_SPECS = (
     {"name": "mesh", "segments_per_turn": 16, "timestep": 1.25e-5, "wall_seconds": 3600.0},
 )
 PRESET_ID = "stairs-walking"
-MODEL_VERSION = "helical-box-cable-v3"
 NATIVE_LOG_NAMES = ("MUJOCO_LOG.TXT", "mujoco.log", "mujoco_log.txt")
 WARNING_TOKENS = ("warning", "nan", "inf", "reset", "unstable", "qacc", "qpos", "qvel")
 
@@ -211,6 +211,7 @@ def run_case(base: RunConfig, spec: dict[str, Any], output: Path) -> dict[str, A
     python_warnings: list[dict[str, str]] = []
     error: str | None = None
     timed_out = False
+    last_accepted_time = 0.0
     native_baseline = native_log_baseline()
     next_heartbeat = 30.0
 
@@ -247,6 +248,7 @@ def run_case(base: RunConfig, spec: dict[str, Any], output: Path) -> dict[str, A
                         timed_out = True
                         break
                     simulation.step()
+                    last_accepted_time = simulation.time
                     if simulation.time + 1.0e-12 >= next_progress:
                         print(f"[{spec['name']}] simulated {simulation.time:.3f}/{simulation.duration:g} s; wall {time.monotonic() - started:.1f} s", flush=True)
                         next_progress += 0.2
@@ -330,6 +332,10 @@ def run_case(base: RunConfig, spec: dict[str, Any], output: Path) -> dict[str, A
         "hdf5_error": hdf5_error,
         "warnings": warnings_payload,
         "support_evidence": support,
+        "last_accepted_time_s": last_accepted_time,
+        "last_exported_frame_time_s": frames[-1]["time"] if frames else None,
+        "engine_time_after_failure_s": simulation.time if simulation is not None and error else None,
+        "post_failure_instantaneous_metrics_valid": not bool(error or warning_detected),
     })
     write_json(output / "summary.json", summary_payload)
     record = {
@@ -338,7 +344,11 @@ def run_case(base: RunConfig, spec: dict[str, Any], output: Path) -> dict[str, A
         "error": error,
         "wall_seconds": wall_seconds,
         "wall_budget_seconds": spec["wall_seconds"],
-        "simulation_time": simulation_summary.get("time", 0.0),
+        # MuJoCo can reset its data and clock after BADQACC. Keep the accepted
+        # timeline separate from that reset state, which is only diagnostic.
+        "simulation_time": last_accepted_time if error else simulation_summary.get("time", 0.0),
+        "engine_time_after_failure_s": simulation.time if simulation is not None and error else None,
+        "post_failure_instantaneous_metrics_valid": not bool(error or warning_detected),
         "duration": config.numerics.duration,
         "config": config_data,
         "warning_detected": warning_detected,
@@ -475,7 +485,7 @@ def write_report(output: Path, report: dict[str, Any]) -> None:
     lines = [
         "# Stair walking numerical validation",
         "",
-        f"- mode: `{report['mode']}`; base preset: `{PRESET_ID}`; model: `{MODEL_VERSION}`",
+        f"- mode: `{report['mode']}`; base preset: `{PRESET_ID}`; model: `{report.get('model_version', MODEL_VERSION)}`",
         f"- created: `{report['created_at']}`",
         "- physical material and scene parameters are copied from the preset; only numerical segments, timestep, and wall budget vary by case.",
         "",

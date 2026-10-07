@@ -1,11 +1,11 @@
 {
   "created_at": "2026-10-06T18:43:47.860964+00:00",
-  "model_version": "helical-box-cable-v3",
+  "model_version": "helical-box-cable-v4",
   "engine_version": "3.15.0",
   "software": {
-    "pytest_passed": 57,
-    "browser_tests_passed": 11,
-    "linux_container_ci": "1686e3a3dac90088be8eb77d2c521ea3ef776723 passed all verify tests, real container calculations, two live WebSocket/export checks, and restart persistence",
+    "pytest_passed": 66,
+    "browser_tests_passed": 13,
+    "linux_container_ci": "29920d423274425fa19239099f6ad0d47b40812b passed verify, actual container calculations, streamed exports and restart persistence",
     "windows_native_failure": {
       "run_id": "6d793726139341cd93abf8fe677272da",
       "error": "worker exited unexpectedly, Windows status 3221225477",
@@ -61,6 +61,14 @@
       "container_smoke": "docs/validation/linux-container.json",
       "runtime_stream": "docs/validation/linux-runtime-stream.json",
       "passed": true
+    },
+    "public_image_candidate": {
+      "tag": "v0.1.0-rc.2",
+      "source_sha": "d88fa1047432174780b5905222b19cfb271e17f1",
+      "digest": "sha256:84f2f485b20809673c0bb54a680863c2c6dd8754fa1c405bc18b1cf4f4eacc92",
+      "visibility": "public",
+      "anonymous_pull_passed": true,
+      "workflow_url": "https://github.com/FanYu-Nijika/slinky-lab/actions/runs/37583504264"
     }
   },
   "model_checks": {
@@ -296,8 +304,8 @@
     "independent_experimental_support": false
   },
   "stairs": {
-    "status": "baseline_three_flips_observed_mesh_refinement_pending",
-    "contact_refinement": "8 segments/turn, 50us baseline: three end supports; Linux 16 segments/turn and smaller-dt validation pending",
+    "status": "refinement_not_passed",
+    "contact_refinement": "half-dt preserves first three endpoint sequence; second support time changes 6.495%; 16 segments/turn timed out at 0.8025875 s within 3600 s budget",
     "world_axis_probe_records": [
       {
         "case": "A",
@@ -422,18 +430,75 @@
         "last"
       ],
       "max_penetration_m": 0.0005473750576079836,
-      "mesh_refinement": "pending"
+      "mesh_refinement": "not established; extended case timed out"
     },
     "convergence_workflow": {
       "source_sha": "246f5f3f89a3d8b76da5bb2f6581b0020d230416",
       "workflow_url": "https://github.com/FanYu-Nijika/slinky-lab/actions/runs/37580189844",
-      "status": "in_progress",
-      "passed": null
+      "status": "completed",
+      "passed": false,
+      "conclusion": "failure",
+      "report": "docs/validation/stairs-convergence.json"
+    },
+    "browser_run": {
+      "run_id": "4801a58baab34ce18a180523f9cffd2d",
+      "status": "completed",
+      "frames": 49,
+      "simulation_duration_s": 2.4,
+      "confirmed_flip_count": 3,
+      "all_health_checks_ok": true,
+      "numerical_refinement": "not established by this UI run"
+    },
+    "refinement_observation": {
+      "baseline_confirmed": 3,
+      "half_dt_confirmed": 4,
+      "first_three_endpoint_sequence_matches": true,
+      "half_dt_support_time_relative_changes": [
+        0.006160006160524135,
+        0.06494518994428043,
+        0.03089887640554109
+      ],
+      "mesh_status": "timeout",
+      "mesh_simulation_time_s": 0.8025874999997968,
+      "mesh_wall_seconds": 3600.372609873,
+      "native_warnings_detected": false,
+      "acceptance_passed": false
+    },
+    "arched_initial_condition": {
+      "report": "docs/validation/arched-initial-pose.json",
+      "geometry_passed": true,
+      "short_release_passed": true,
+      "simulation_time_s": 0.12,
+      "three_step_gait_verified": false,
+      "experimental_support": false
+    },
+    "arched_full_release": {
+      "report": "docs/validation/arched-full-release.json",
+      "status": "completed",
+      "simulation_duration_s": 1.5,
+      "frame_count": 76,
+      "confirmed_flip_count": 1,
+      "movement_classification": "sliding",
+      "consecutive_alternate_end_gait_observed": false,
+      "max_penetration_m": 0.0004325,
+      "refinement_verified": false,
+      "experimental_support": false
+    },
+    "thin_steel_assumption_probe": {
+      "report": "docs/validation/thin-steel-probe-failed.json",
+      "status": "failed",
+      "warning": "mjWARN_BADQACC",
+      "warning_reported_time_s": 0.0542,
+      "last_exported_frame_time_s": 0.04,
+      "engine_time_after_auto_reset_s": 2.5e-05,
+      "post_failure_instantaneous_metrics_valid": false,
+      "included_as_default_preset": false
     }
   },
   "experimental_support": "not established; static length was used for fitting",
   "overall_acceptance": false,
   "latest_promotion_allowed": false,
   "source_evidence_model_version": "helical-box-cable-v2",
-  "compatibility_note": "v3 changes the nonzero initial stair angular velocity from local to world +Y. Zero-angular-velocity drop and static v2 evidence remains applicable; v3 quick validation and an HTTP/browser drop run were repeated."
+  "compatibility_note": "v4 adds optional manually deformed arched stair initial qpos and diagnostics; omitted initial_pose defaults to the legacy tilted pose. Drop and legacy tilted calculations retain their physical definition. Existing v2/v3 evidence is labelled with the actual source model; new arched gait has not been certified.",
+  "updated_at": "2026-10-07T08:09:20.880736+00:00"
 }

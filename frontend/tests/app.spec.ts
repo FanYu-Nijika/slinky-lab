@@ -115,6 +115,30 @@ test("submits a run, shows it in history, and supports timeline/export controls"
   expect(commandCalls).toBe(0);
 });
 
+test("keeps selected result and history in sync with websocket terminal updates", async ({ page }) => {
+  const failedRun = {
+    run_id: "run-test",
+    status: "failed",
+    config,
+    summary: {},
+    artifacts: [],
+    error: "worker failed",
+    metadata: { engine_version: "3.15.0", static_geoms: [], half_sizes: [[0.001, 0.001, 0.001]] },
+  };
+  await page.routeWebSocket("**/api/v1/runs/run-test/stream", (websocket) => {
+    setTimeout(() => {
+      websocket.send(JSON.stringify({ type: "status", data: failedRun }));
+      websocket.send(JSON.stringify({ type: "error", data: { message: "worker failed", run: failedRun } }));
+    }, 300);
+  });
+  await mockApi(page);
+  await page.goto("/");
+  await page.getByTestId("start-run").click();
+  await expect(page.locator(".result-status-failed")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".status-text-failed")).toBeVisible();
+  await expect(page.getByText("worker failed")).toBeVisible();
+});
+
 test("keeps preparation pause, step, and cancel controls actionable", async ({ page }) => {
   const actions: string[] = [];
   await mockPreparingApi(page, actions);
@@ -152,6 +176,42 @@ test("loads the backend drop-validation preset on first open", async ({ page }) 
   await page.getByText("展开高级数值设置", { exact: true }).click();
   await expect.poll(async () => Number(await inputFor(page, "每圈段数").inputValue())).toBe(16);
   await expect.poll(async () => Number(await inputFor(page, "积分步长").inputValue())).toBeCloseTo(0.0000125, 12);
+});
+
+test("maps scenario cards to declared online presets before submitting", async ({ page }) => {
+  const stairsMaterial = { ...config.material, turns: 12, pitch: 0.0055, strip_width: 0.006, strip_thickness: 0.0045 };
+  const stairsArched = {
+    id: "stairs-arched",
+    label: "楼梯拱形释放",
+    description: "test",
+    config: {
+      ...config,
+      name: "楼梯拱形释放",
+      scenario: "stairs" as const,
+      material: stairsMaterial,
+      scene: { ...config.scene, step_depth: 0.12, initial_pose: "arched" as const, arch_rise: null, arch_end_turns: 2, arch_free_clearance: 0.025 },
+    },
+  };
+  let postedConfig: any;
+  await mockApi(page, (runConfig) => { postedConfig = runConfig; }, [
+    { id: "drop-validation", label: "下落数值验证小算例（3 圈）", description: "test", config: DEFAULT_DROP_VALIDATION_CONFIG },
+    stairsArched,
+  ]);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: /悬挂下落/ }).click();
+  await expect(inputFor(page, "名称")).toHaveValue("下落数值验证小算例");
+  await expect(inputFor(page, "圈数")).toHaveValue("3");
+
+  await page.getByRole("button", { name: /翻转下楼梯/ }).click();
+  await expect(inputFor(page, "名称")).toHaveValue("楼梯拱形释放");
+  await expect(page.getByRole("spinbutton", { name: "圈数 圈", exact: true })).toHaveValue("12");
+  await expect(page.getByLabel("起步姿态")).toHaveValue("arched");
+  await page.getByTestId("start-run").click();
+  await expect(page.getByText("已完成").first()).toBeVisible({ timeout: 10_000 });
+
+  expect(postedConfig.scene.initial_pose).toBe("arched");
+  expect(postedConfig.material).toEqual(stairsMaterial);
 });
 
 test("does not replace an edit while the default preset request is pending", async ({ page }) => {
