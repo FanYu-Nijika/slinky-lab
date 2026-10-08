@@ -6,6 +6,7 @@ from pydantic import ValidationError
 mujoco = pytest.importorskip("mujoco")
 
 from slinky_lab.physics import Simulation
+from slinky_lab.presets import get_preset
 from slinky_lab.schemas import Numerics, RunConfig, Scene
 
 
@@ -64,10 +65,13 @@ def test_arched_pose_preserves_reference_and_fk_link_lengths():
     assert diagnostics["applied_force_max"] == pytest.approx(0.0, abs=1e-15)
     assert diagnostics["equilibrium_status"] == "manual_non_equilibrium"
     assert simulation.summary()["support_diagnostics"]["verified_steps"] == []
+    # Fixed rod lengths alone do not imply collision-free geometry.
+    assert diagnostics["preflight_valid"] is False
 
 
 def test_arched_pose_can_release_for_one_short_real_step():
-    simulation = Simulation(_config(initial_pose="arched"))
+    simulation = Simulation(get_preset("stairs-arched"))
+    assert simulation.summary()["initial_pose_diagnostics"]["preflight_valid"] is True
     simulation.prepare()
     simulation.step()
     assert simulation.time == pytest.approx(simulation.dt)

@@ -100,7 +100,7 @@ jobs:
           python -m pip install --require-hashes -r requirements.lock
           python -m pip install -e '.[test]'
       - name: Validate search definitions and damping invariance
-        run: python -m pytest tests/test_gait_search.py tests/test_schemas.py tests/test_physics.py -q
+        run: python -m pytest tests/test_gait_search.py tests/test_gait_motion.py tests/test_schemas.py tests/test_physics.py -q
       - name: Run one bounded passive-gait case
         env:
           GAIT_CASE: ${{ matrix.case }}

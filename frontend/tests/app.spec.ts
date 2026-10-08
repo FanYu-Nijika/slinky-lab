@@ -387,10 +387,10 @@ test("labels ambiguous stair support without claiming confirmed flips", async ({
   await page.goto("/");
   await page.getByTestId("start-run").click();
   await expect(page.getByTestId("result-summary")).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText("翻转候选（支撑有歧义）")).toBeVisible();
+  await expect(page.getByText("换阶候选（支撑有歧义）")).toBeVisible();
   await expect(page.getByText("首次接触", { exact: true })).toBeVisible();
   await expect(page.getByText("持续端圈支撑", { exact: true })).toBeVisible();
-  await expect(page.getByText("确认翻转", { exact: true })).toBeVisible();
+  await expect(page.getByText("端圈换阶支撑", { exact: true })).toBeVisible();
   await expect(page.getByText("0（候选 3）", { exact: true })).toBeVisible();
   await expect(page.getByText("3 阶通过", { exact: true })).toHaveCount(0);
 });

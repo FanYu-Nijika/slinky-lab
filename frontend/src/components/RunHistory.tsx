@@ -90,11 +90,12 @@ function StairSupportSummary({ summary }: { summary: RunSummary }) {
       <div className="result-grid">
         <ResultMetric label="首次接触" value={firstTouchCount} />
         <ResultMetric label="持续端圈支撑" value={sustainedEndpointCount} />
-        <ResultMetric label="确认翻转" value={support ? `${confirmedCount}（候选 ${candidateCount}）` : "未验证"} />
+        <ResultMetric label="端圈换阶支撑" value={support ? `${confirmedCount}（候选 ${candidateCount}）` : "未验证"} />
         <ResultMetric label="支撑歧义" value={ambiguityCount} />
       </div>
       {supportEvents.length > 0 ? <ul className="step-event-list">{supportEvents.map((event, index) => <li key={`${event.step ?? "step"}-${event.first_touch_time ?? index}`}>{formatSupportEvent(event, index)}</li>)}</ul> : legacyEvents.length > 0 ? <ul className="step-event-list">{legacyEvents.map((event, index) => <li key={`${event.step ?? "step"}-${event.time ?? index}`}>首次接触 · {formatStepEvent(event, index)}</li>)}</ul> : <div className="step-event-empty">释放后未检测到阶梯支撑事件</div>}
       {reasons.length > 0 && <div className="step-event-empty">歧义原因：{reasons.join("；")}</div>}
+      <div className="step-event-empty">拱形首次落位需单独记数；完整翻转还需核查抬起、越端和落阶动作。</div>
     </div>
   );
 }
@@ -125,8 +126,8 @@ function validationStatus(value: unknown, kind: "numerical" | "experimental"): s
 
 function movementStatus(value: unknown): string {
   const normalized = normalize(value);
-  if (normalized === "flip") return "翻转";
-  if (normalized === "ambiguous_flip") return "翻转候选（支撑有歧义）";
+  if (normalized === "flip") return "端圈交替换阶";
+  if (normalized === "ambiguous_flip") return "换阶候选（支撑有歧义）";
   if (normalized === "sliding") return "滑移";
   if (normalized === "stopped") return "停止";
   if (normalized === "side_fall") return "侧落";
