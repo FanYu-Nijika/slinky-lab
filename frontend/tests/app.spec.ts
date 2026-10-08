@@ -275,6 +275,57 @@ test("submits the extended physical and stairs parameters independently", async 
   expect(postedConfig.numerics.max_wall_seconds).toBe(720);
 });
 
+test("selects continuous rod viscosity while keeping legacy configs compatible", async ({ page }) => {
+  let postedConfig: any;
+  await mockApi(page, (runConfig) => { postedConfig = runConfig; });
+  await page.goto("/");
+
+  await page.getByText("展开高级数值设置", { exact: true }).click();
+  const previewSegments = Number(await inputFor(page, "每圈段数").inputValue());
+  const radius = Number(await inputFor(page, "半径").inputValue());
+  const pitch = Number(await inputFor(page, "螺距").inputValue());
+  const physicalSection = page.locator("details.param-section").filter({ hasText: "弹性与接触" });
+  await physicalSection.locator("summary").click();
+  await expect(page.getByLabel("转动耗散模型")).toHaveValue("joint");
+  await expect(inputFor(page, "铰接阻尼")).toBeVisible();
+  await expect(page.getByText("N·m·s", { exact: true })).toBeVisible();
+
+  const legacyDamping = Number(await inputFor(page, "铰接阻尼").inputValue());
+  const previewRestLength = Math.hypot(
+    2 * radius * Math.sin(Math.PI / previewSegments),
+    pitch / previewSegments,
+  );
+  const expectedViscosity = legacyDamping * previewRestLength;
+  await page.getByLabel("转动耗散模型").selectOption("viscosity");
+  await expect(inputFor(page, "铰接阻尼")).toHaveCount(0);
+  const viscosity = inputFor(page, "连续杆黏性 η");
+  await expect.poll(async () => Number(await viscosity.inputValue())).toBeCloseTo(expectedViscosity, 14);
+  await expect(page.getByText("N·m²·s", { exact: true })).toBeVisible();
+  await expect(page.getByText(/网格加密时保持 η 不变/)).toBeVisible();
+
+  await page.getByLabel("转动耗散模型").selectOption("joint");
+  await expect.poll(async () => Number(await inputFor(page, "铰接阻尼").inputValue())).toBeCloseTo(legacyDamping, 14);
+  await page.getByLabel("转动耗散模型").selectOption("viscosity");
+  await expect.poll(async () => Number(await viscosity.inputValue())).toBeCloseTo(expectedViscosity, 14);
+
+  await page.getByRole("button", { name: "精细研究", exact: true }).click();
+  const fineSegments = Math.min(64, previewSegments * 2);
+  await expect.poll(async () => Number(await inputFor(page, "每圈段数").inputValue())).toBe(fineSegments);
+  await expect.poll(async () => Number(await viscosity.inputValue())).toBeCloseTo(expectedViscosity, 14);
+
+  const fineRestLength = Math.hypot(
+    2 * radius * Math.sin(Math.PI / fineSegments),
+    pitch / fineSegments,
+  );
+  const expectedFineDamping = expectedViscosity / fineRestLength;
+  await page.getByLabel("转动耗散模型").selectOption("joint");
+  await expect.poll(async () => Number(await inputFor(page, "铰接阻尼").inputValue())).toBeCloseTo(expectedFineDamping, 14);
+  await page.getByTestId("start-run").click();
+  await expect(page.getByText("已完成").first()).toBeVisible({ timeout: 10_000 });
+  expect(postedConfig.material.rotational_viscosity).toBeNull();
+  expect(postedConfig.material.damping).toBeCloseTo(expectedFineDamping, 14);
+});
+
 test("refines a three-turn preset relative to its mesh and restores it", async ({ page }) => {
   const presetConfig = {
     ...config,

@@ -208,6 +208,7 @@ class Simulation:
         self._initial_pose_clearance_targets: tuple[float, float] | None = None
         self._initial_pose_end_segments = 0
         self._initial_pose_diagnostics: dict[str, Any] = {}
+        self._prepare_error: str | None = None
         self._initialise_state()
 
     @property
@@ -796,6 +797,9 @@ class Simulation:
         acceleration = np.asarray(self.data.qacc, dtype=float)
         resolved = "arched" if target is not None else ("tilted" if self.config.scenario == "stairs" else "drop_reference")
         equilibrium_status = "manual_non_equilibrium" if target is not None else ("drop_hold_pending" if self.config.scenario == "drop" else "reference_pose")
+        preflight_threshold = max(1.0e-6, 0.05 * float(self.config.material.strip_thickness)) if target is not None else None
+        preflight_valid = None if preflight_threshold is None else bool(initial_penetration <= preflight_threshold)
+        preflight_status = "not_applicable" if preflight_threshold is None else ("valid" if preflight_valid else "invalid_initial_pose")
         axis_targets = [] if self._initial_pose_axis_targets is None else self._initial_pose_axis_targets.tolist()
         clearance_targets = [] if self._initial_pose_clearance_targets is None else list(self._initial_pose_clearance_targets)
         self._initial_pose_diagnostics = {
@@ -820,6 +824,9 @@ class Simulation:
             "initial_stair_contact_count": stair_contact_count,
             "initial_self_contact_count": self_contact_count,
             "initial_max_penetration_m": initial_penetration,
+            "preflight_penetration_threshold_m": preflight_threshold,
+            "preflight_valid": preflight_valid,
+            "preflight_status": preflight_status,
             "actual_first_clearance_m": first_clearance,
             "actual_free_end_clearance_m": last_clearance,
             "first_end_x_range_m": first_x_range,
@@ -832,6 +839,31 @@ class Simulation:
             "applied_force_max": float(np.max(np.abs(np.asarray(self.data.qfrc_applied, dtype=float)), initial=0.0)),
             "release_driving_note": "initial pose is written to data.qpos; no persistent equality, actuator, or applied force is used",
         }
+
+    def _validate_initial_pose_before_release(self) -> None:
+        """Reject an arched pose whose construction already penetrates terrain."""
+
+        if self.config.scenario != "stairs" or self.config.scene.initial_pose != "arched":
+            return
+        diagnostics = self._initial_pose_diagnostics
+        threshold = max(1.0e-6, 0.05 * float(self.config.material.strip_thickness))
+        penetration = float(diagnostics.get("initial_max_penetration_m", float("nan")))
+        diagnostics["preflight_penetration_threshold_m"] = threshold
+        diagnostics["preflight_valid"] = bool(math.isfinite(penetration) and penetration <= threshold)
+        if diagnostics["preflight_valid"]:
+            diagnostics["preflight_status"] = "valid"
+            return
+        diagnostics["preflight_status"] = "invalid_initial_pose"
+        error = (
+            f"invalid arched initial pose: initial penetration {penetration:.9g} m exceeds "
+            f"preflight threshold {threshold:.9g} m; adjust arch rise, step depth, or terminal pose"
+        )
+        diagnostics["preflight_error"] = error
+        self._prepare_error = error
+        self._released = False
+        self._status = "invalid_initial_pose"
+        self._settle_status = "invalid_initial_pose"
+        raise ValueError(error)
 
     @staticmethod
     def _is_cancelled(callback: CancelCallback | None) -> bool:
@@ -856,6 +888,7 @@ class Simulation:
 
         if self._prepared:
             return
+        self._validate_initial_pose_before_release()
         if self.config.scenario == "drop":
             settle_steps = max(1, int(math.ceil(self.config.scene.settle_time / self.dt)))
             self._status = "settling"
@@ -1272,6 +1305,7 @@ class Simulation:
         metrics = self._metrics()
         return {
             "status": self._status,
+            "error": self._prepare_error,
             "scenario": self.config.scenario,
             "prepared": self._prepared,
             "released": self._released,

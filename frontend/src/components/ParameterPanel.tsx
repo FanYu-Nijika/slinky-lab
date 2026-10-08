@@ -19,6 +19,19 @@ type NumberFieldProps = {
   onChange: (value: number) => void;
 };
 
+type DampingMode = "joint" | "viscosity";
+
+function resolvedSegments(numerics: Numerics) {
+  const fallback = numerics.profile === "fine" ? 24 : 12;
+  return Math.max(1, numerics.segments_per_turn ?? fallback);
+}
+
+function restSegmentLength(config: RunConfig) {
+  const segments = resolvedSegments(config.numerics);
+  const arc = 2 * config.material.radius * Math.sin(Math.PI / segments);
+  return Math.hypot(arc, config.material.pitch / segments);
+}
+
 function NumberField({ label, value, step = 0.001, min, max, unit, onChange }: NumberFieldProps) {
   return (
     <label className="field">
@@ -58,6 +71,8 @@ export function ParameterPanel({ config, presets, onChange, onPreset, collapsed 
   const initialPose: InitialPose = config.scene.initial_pose ?? "tilted";
   const archEndTurns = config.scene.arch_end_turns ?? 2;
   const automaticArchRise = config.scene.step_depth / 2;
+  const dampingMode: DampingMode = config.material.rotational_viscosity == null ? "joint" : "viscosity";
+  const rotationalViscosity = config.material.rotational_viscosity ?? 0;
   const chooseProfile = (profile: Numerics["profile"]) => {
     if (profile === config.numerics.profile) return;
     const segments = config.numerics.segments_per_turn ?? (config.numerics.profile === "fine" ? 24 : 12);
@@ -167,7 +182,40 @@ export function ParameterPanel({ config, presets, onChange, onPreset, collapsed 
         <Section title="弹性与接触" defaultOpen={false}>
           <NumberField label="杨氏模量 E" value={config.material.young_modulus} min={1e4} max={3e11} step={1e6} unit="Pa" onChange={(value) => updateMaterial({ young_modulus: value })} />
           <NumberField label="剪切模量 G" value={config.material.shear_modulus} min={1e3} max={1.5e11} step={1e6} unit="Pa" onChange={(value) => updateMaterial({ shear_modulus: value })} />
-          <NumberField label="铰接阻尼" value={config.material.damping} min={0} max={0.1} step={0.000001} unit="Nm·s" onChange={(value) => updateMaterial({ damping: value })} />
+          <label className="field">
+            <span>转动耗散模型</span>
+            <select
+              className="select-input"
+              aria-label="转动耗散模型"
+              value={dampingMode}
+              onChange={(event) => {
+                const mode = event.target.value as DampingMode;
+                if (mode === "viscosity") {
+                  const viscosity = config.material.rotational_viscosity ?? config.material.damping * restSegmentLength(config);
+                  updateMaterial({ rotational_viscosity: viscosity });
+                } else {
+                  const effectiveDamping = config.material.rotational_viscosity == null
+                    ? config.material.damping
+                    : Math.min(0.1, config.material.rotational_viscosity / restSegmentLength(config));
+                  updateMaterial({ rotational_viscosity: null, damping: effectiveDamping });
+                }
+              }}
+            >
+              <option value="joint">每关节阻尼（旧模型）</option>
+              <option value="viscosity">连续杆黏性（按长度）</option>
+            </select>
+          </label>
+          {dampingMode === "joint" ? (
+            <>
+              <NumberField label="铰接阻尼 cᵢ（每关节）" value={config.material.damping} min={0} max={0.1} step={0.000001} unit="N·m·s" onChange={(value) => updateMaterial({ damping: value })} />
+              <div className="source-note" style={{ padding: "4px 0 0" }}><span className="source-dot" /><div>每关节阻尼单位为 N·m·s；切换连续杆模型会按当前网格换算，换回时超过 0.1 会按上限限制。</div></div>
+            </>
+          ) : (
+            <>
+              <NumberField label="连续杆黏性 η" value={rotationalViscosity} min={0} max={0.01} step={0.000001} unit="N·m²·s" onChange={(value) => updateMaterial({ rotational_viscosity: value })} />
+              <div className="source-note" style={{ padding: "4px 0 0" }}><span className="source-dot" /><div>后端按 <code>cᵢ = η / l_rest</code> 分配每个离散关节；网格加密时保持 η 不变，耗散尺度随杆段长度一致。</div></div>
+            </>
+          )}
           <NumberField label="台阶/地面摩擦" value={config.material.friction} min={0} max={3} step={0.05} onChange={(value) => updateMaterial({ friction: value })} />
           <NumberField label="圈间摩擦" value={config.material.self_friction ?? 0.5} min={0} max={3} step={0.05} onChange={(value) => updateMaterial({ self_friction: value })} />
           {config.scenario === "drop" && <NumberField label="平衡松弛时长" value={config.scene.settle_time} min={0.05} max={15} step={0.1} unit="s" onChange={(value) => updateScene({ settle_time: value })} />}

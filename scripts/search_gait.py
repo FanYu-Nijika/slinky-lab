@@ -34,6 +34,15 @@ CASES: dict[str, dict[str, Any]] = {
     "macro-arch": {"preset": "stairs-walking", "scene": {"initial_pose": "arched", "step_height": 0.06, "initial_forward_velocity": 0, "initial_angular_velocity": 0}},
     "macro-tilt-control": {"preset": "stairs-walking"},
     "macro-tilt-h06": {"preset": "stairs-walking", "scene": {"step_height": 0.06}},
+    "safe-g2-h06": {"modulus_factor": 2, "scene": {"step_depth": 0.12, "step_height": 0.06, "arch_rise": 0.06}, "dt": 1.25e-5},
+    "safe-g4-h06": {"modulus_factor": 4, "scene": {"step_depth": 0.12, "step_height": 0.06, "arch_rise": 0.06}, "dt": 1.25e-5},
+    "safe-g4-h04": {"modulus_factor": 4, "scene": {"step_depth": 0.12, "step_height": 0.04, "arch_rise": 0.06}, "dt": 1.25e-5},
+    "safe-g4-rise": {"modulus_factor": 4, "scene": {"step_depth": 0.12, "step_height": 0.06, "arch_rise": 0.08}, "dt": 1.25e-5},
+    "safe-g4-launch": {"modulus_factor": 4, "scene": {"step_depth": 0.12, "step_height": 0.06, "arch_rise": 0.06, "initial_angular_velocity": 1}, "dt": 1.25e-5},
+    "safe-g4-grip": {"modulus_factor": 4, "material": {"friction": 1.4}, "scene": {"step_depth": 0.12, "step_height": 0.06, "arch_rise": 0.06}, "dt": 1.25e-5},
+    "safe-g4-low-damp": {"modulus_factor": 4, "material": {"damping": 5e-6}, "scene": {"step_depth": 0.12, "step_height": 0.06, "arch_rise": 0.06}, "dt": 6.25e-6},
+    "safe-g4-short": {"modulus_factor": 4, "scene": {"step_depth": 0.10, "step_height": 0.06, "arch_rise": 0.06, "arch_end_turns": 1}, "dt": 1.25e-5},
+    "safe-n24-g8": {"modulus_factor": 8, "material": {"turns": 24}, "scene": {"step_depth": 0.12, "step_height": 0.06, "arch_rise": 0.06, "arch_end_turns": 4}, "dt": 6.25e-6, "wall_seconds": 4800},
 }
 VARIANTS = ("base", "half_dt", "mesh", "offset_minus", "offset_plus", "rise_minus", "rise_plus")
 
@@ -95,6 +104,7 @@ def candidate_check(record: dict[str, Any], config: RunConfig) -> dict[str, Any]
         "completed_release": record.get("status") == "completed" and record.get("release_ready") is True,
         "no_warning": not record.get("warning_detected", True),
         "no_timeout": not record.get("timeout_detected", True),
+        "no_side_fall": record.get("movement_classification") != "side_fall",
         "trajectory_saved": not record.get("frame_errors") and not record.get("hdf5_error") and record.get("frame_count", 0) > 1,
         "three_alternating_supports": support.get("confirmed_flip_count", 0) >= 3,
         "penetration_bounded": penetration is not None and 0 <= penetration <= 0.5 * config.material.strip_thickness,
@@ -114,6 +124,7 @@ def main() -> None:
     parser.add_argument("--wall-seconds", type=float)
     parser.add_argument("--output", type=Path, default=Path("reports/gait-search"))
     parser.add_argument("--list", action="store_true")
+    parser.add_argument("--preflight-only", action="store_true", help="Record initial geometry without preparing or integrating the model")
     args = parser.parse_args()
     if args.list:
         for case_id in CASES:
@@ -121,6 +132,18 @@ def main() -> None:
             print(f"{case_id}: {config.material.turns} turns, E={config.material.young_modulus:g}, h={config.scene.step_height:g}, d={config.scene.step_depth:g}, dt={config.numerics.timestep:g}")
         return
     config = build_config(args.case, args.variant, args.duration, args.wall_seconds)
+    if args.preflight_only:
+        from slinky_lab.physics import Simulation
+        simulation = Simulation(config)
+        output = args.output / f"{args.case}-{args.variant}"
+        output.mkdir(parents=True, exist_ok=True)
+        write_json(output / "preflight.json", {
+            "config": config.model_dump(mode="json"), "phase": "preflight",
+            "integration_steps": 0, "initial_geometry": simulation.summary()["initial_pose_diagnostics"],
+        })
+        initial = simulation.summary()["initial_pose_diagnostics"]
+        print(f"{args.case}: preflight={initial.get('preflight_valid')}, penetration={initial['initial_max_penetration_m']:.9g} m, qacc={initial['initial_acceleration_max']:.9g}")
+        return
     spec = {
         "name": f"{args.case}-{args.variant}",
         "segments_per_turn": config.numerics.resolved()["segments_per_turn"],

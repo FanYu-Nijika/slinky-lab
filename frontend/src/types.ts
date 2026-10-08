@@ -21,6 +21,11 @@ export interface Material {
   young_modulus: number;
   shear_modulus: number;
   damping: number;
+  /**
+   * Optional length-normalized rotational viscosity. `null` (and a missing
+   * field from older saved configs) keeps the legacy per-joint damping model.
+   */
+  rotational_viscosity?: number | null;
   friction: number;
   self_friction?: number;
 }
@@ -227,6 +232,7 @@ export const DEFAULT_MATERIAL: Material = {
   young_modulus: 1e8,
   shear_modulus: 3.7e7,
   damping: 0.00001,
+  rotational_viscosity: null,
   friction: 0.5,
   self_friction: 0.5,
 };

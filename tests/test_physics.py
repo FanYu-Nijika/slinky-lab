@@ -6,6 +6,7 @@ mujoco = pytest.importorskip("mujoco")
 
 from slinky_lab import MODEL_VERSION
 from slinky_lab.physics import Simulation
+from slinky_lab.presets import get_preset
 from slinky_lab.schemas import Numerics, RunConfig, Scene
 
 
@@ -146,3 +147,42 @@ def test_smooth_curvature_dissipation_is_mesh_consistent():
         power = float(np.sum(coefficients * relative_rate**2))
         normalized_powers.append(power / float(np.sum(links)))
     assert normalized_powers[0] == pytest.approx(normalized_powers[1], rel=0.02)
+
+
+def test_valid_stairs_arched_pose_passes_release_preflight():
+    simulation = Simulation(get_preset("stairs-arched"))
+    diagnostics = simulation.metadata()["initial_pose_diagnostics"]
+    assert diagnostics["preflight_valid"] is True
+    assert diagnostics["initial_max_penetration_m"] <= diagnostics["preflight_penetration_threshold_m"]
+    simulation.prepare()
+    summary = simulation.summary()
+    assert summary["status"] == "ready"
+    assert summary["prepared"] is True
+    assert summary["released"] is True
+    assert summary["steps"] == 0
+    assert summary["time"] == pytest.approx(0.0)
+
+
+def test_invalid_stairs_arched_pose_is_rejected_before_mj_step(monkeypatch):
+    raw = get_preset("stairs-arched").model_dump(mode="python")
+    raw["scene"].update({"step_depth": 0.08, "step_height": 0.06, "arch_rise": 0.04, "arch_end_turns": 2})
+    config = RunConfig.model_validate(raw)
+    simulation = Simulation(config)
+    diagnostics = simulation.metadata()["initial_pose_diagnostics"]
+    assert diagnostics["preflight_valid"] is False
+    assert diagnostics["initial_max_penetration_m"] > diagnostics["preflight_penetration_threshold_m"]
+
+    def unexpected_step(*_args, **_kwargs):
+        raise AssertionError("invalid initial pose must not call mj_step")
+
+    monkeypatch.setattr(mujoco, "mj_step", unexpected_step)
+    with pytest.raises(ValueError, match="invalid arched initial pose"):
+        simulation.prepare()
+    summary = simulation.summary()
+    assert summary["status"] == "invalid_initial_pose"
+    assert summary["error"] is not None
+    assert "preflight threshold" in summary["error"]
+    assert summary["prepared"] is False
+    assert summary["released"] is False
+    assert summary["steps"] == 0
+    assert summary["time"] == pytest.approx(0.0)
