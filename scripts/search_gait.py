@@ -43,6 +43,9 @@ CASES: dict[str, dict[str, Any]] = {
     "safe-g4-low-damp": {"modulus_factor": 4, "material": {"damping": 5e-6}, "scene": {"step_depth": 0.12, "step_height": 0.06, "arch_rise": 0.06}, "dt": 6.25e-6},
     "safe-g4-short": {"modulus_factor": 4, "scene": {"step_depth": 0.10, "step_height": 0.06, "arch_rise": 0.06, "arch_end_turns": 1}, "dt": 1.25e-5},
     "safe-n24-g8": {"modulus_factor": 8, "material": {"turns": 24}, "scene": {"step_depth": 0.12, "step_height": 0.06, "arch_rise": 0.06, "arch_end_turns": 4}, "dt": 6.25e-6, "wall_seconds": 4800},
+    "macro-safe-gap": {"preset": "stairs-walking", "scene": {"initial_pose": "arched", "step_height": 0.06, "arch_rise": 0.06, "arch_free_clearance": 0.035, "initial_forward_velocity": 0, "initial_angular_velocity": 0}, "wall_seconds": 3600},
+    "macro-safe-rise": {"preset": "stairs-walking", "scene": {"initial_pose": "arched", "step_height": 0.06, "arch_rise": 0.07, "initial_forward_velocity": 0, "initial_angular_velocity": 0}, "wall_seconds": 3600},
+    "macro-safe-high": {"preset": "stairs-walking", "scene": {"initial_pose": "arched", "step_height": 0.06, "arch_rise": 0.08, "initial_forward_velocity": 0, "initial_angular_velocity": 0}, "wall_seconds": 3600},
 }
 VARIANTS = ("base", "half_dt", "mesh", "offset_minus", "offset_plus", "rise_minus", "rise_plus")
 

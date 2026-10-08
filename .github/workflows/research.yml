@@ -27,7 +27,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: slinky-research-${{ github.workflow }}-${{ github.ref }}
+  # Independent parameter batches write to separate ephemeral runners.
+  group: slinky-research-${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
