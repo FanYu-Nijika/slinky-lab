@@ -94,3 +94,55 @@ def test_stair_angular_perturbation_uses_world_flip_axis():
     mujoco.mj_objectVelocity(simulation.model, simulation.data, mujoco.mjtObj.mjOBJ_BODY,
                             simulation._body_ids[0], velocity, 0)
     assert velocity[:3] == pytest.approx([0, 2, 0], abs=1e-10)
+
+
+def _viscous_config(segments_per_turn: int, viscosity: float | None) -> RunConfig:
+    return RunConfig.model_validate({
+        "scenario": "drop",
+        "material": {"turns": 3, "damping": 0.003, "rotational_viscosity": viscosity},
+        "numerics": {"segments_per_turn": segments_per_turn, "timestep": 0.0005, "duration": 0.02},
+    })
+
+
+def _ball_damping(simulation: Simulation) -> np.ndarray:
+    return np.asarray(simulation.model.dof_damping[6:], dtype=float).reshape(-1, 3)[:, 0]
+
+
+def test_rotational_viscosity_keeps_legacy_damping_and_free_root():
+    legacy = Simulation(_viscous_config(8, None))
+    assert np.allclose(_ball_damping(legacy), 0.003)
+    assert np.allclose(legacy.model.dof_damping[:6], 0.0)
+    assert legacy.metadata()["damping"]["definition"] == "legacy_per_joint"
+    assert legacy.metadata()["damping"]["effective_range"]["free_root_damping_N_m_s"] == 0.0
+
+    viscosity = 4.0e-5
+    scaled = Simulation(_viscous_config(8, viscosity))
+    assert np.allclose(scaled.model.dof_damping[:6], 0.0)
+    assert np.asarray(scaled.model.dof_damping[6:], dtype=float).size == 3 * (scaled._segments - 1)
+    assert scaled.metadata()["damping"]["input"]["rotational_viscosity"] == viscosity
+    assert scaled.summary()["damping"]["effective_range"]["free_root_damping_N_m_s"] == 0.0
+
+
+def test_rotational_viscosity_scales_each_mesh_link():
+    viscosity = 4.0e-5
+    for segments_per_turn in (8, 16):
+        simulation = Simulation(_viscous_config(segments_per_turn, viscosity))
+        links = np.asarray(simulation._rest_lengths[:-1], dtype=float)
+        coefficients = _ball_damping(simulation)
+        assert coefficients.size == links.size
+        assert coefficients * links == pytest.approx(np.full(links.shape, viscosity), rel=1e-10, abs=1e-12)
+
+
+def test_smooth_curvature_dissipation_is_mesh_consistent():
+    viscosity = 4.0e-5
+    normalized_powers = []
+    for segments_per_turn in (8, 16):
+        simulation = Simulation(_viscous_config(segments_per_turn, viscosity))
+        links = np.asarray(simulation._rest_lengths[:-1], dtype=float)
+        coefficients = _ball_damping(simulation)
+        midpoint = (np.cumsum(links) - 0.5 * links) / np.sum(links)
+        curvature_rate = np.sin(2.0 * np.pi * midpoint) + 0.3 * np.cos(4.0 * np.pi * midpoint)
+        relative_rate = curvature_rate * links
+        power = float(np.sum(coefficients * relative_rate**2))
+        normalized_powers.append(power / float(np.sum(links)))
+    assert normalized_powers[0] == pytest.approx(normalized_powers[1], rel=0.02)

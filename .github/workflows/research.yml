@@ -10,7 +10,18 @@ on:
         options:
           - extended
           - quick
+          - gait-search
         default: extended
+      cases:
+        description: 'Gait search case IDs as a JSON array (empty uses all declared cases)'
+        required: false
+        type: string
+        default: ''
+      variants:
+        description: 'Gait variants as a JSON array; base searches, half_dt/mesh refine, other variants perturb the initial state'
+        required: false
+        type: string
+        default: '["base"]'
 
 permissions:
   contents: read
@@ -21,6 +32,7 @@ concurrency:
 
 jobs:
   stairs-validation:
+    if: inputs.mode != 'gait-search'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
@@ -60,3 +72,42 @@ jobs:
           name: stairs-validation-${{ inputs.mode }}
           path: reports/stairs-validation/
           if-no-files-found: warn
+
+  gait-search:
+    if: inputs.mode == 'gait-search'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 270
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        case: ${{ fromJSON(inputs.cases || '["arched-control","n12-g1-h06","n12-g4-h06","n12-g16-h06","n12-g4-h04","n12-g4-h08","n12-g4-grip","n24-g4-h06","n36-g6-h06","macro-arch","macro-tilt-control","macro-tilt-h06"]') }}
+        variant: ${{ fromJSON(inputs.variants || '["base"]') }}
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install locked runtime and project
+        run: |
+          python -m pip install --require-hashes -r requirements.lock
+          python -m pip install -e '.[test]'
+      - name: Validate search definitions and damping invariance
+        run: python -m pytest tests/test_gait_search.py tests/test_schemas.py tests/test_physics.py -q
+      - name: Run one bounded passive-gait case
+        env:
+          GAIT_CASE: ${{ matrix.case }}
+          GAIT_VARIANT: ${{ matrix.variant }}
+        run: python scripts/search_gait.py --case "$GAIT_CASE" --variant "$GAIT_VARIANT" --output reports/gait-search
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: passive-gait-${{ matrix.case }}-${{ matrix.variant }}
+          path: reports/gait-search/
+          if-no-files-found: error

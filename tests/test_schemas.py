@@ -3,12 +3,15 @@ import math
 import pytest
 from pydantic import ValidationError
 
-from slinky_lab.schemas import Frame, RunConfig, SweepConfig
+from slinky_lab.schemas import Frame, Material, RunConfig, SweepConfig
 
 
 def test_physical_configuration_rejects_nonfinite_and_interpenetrating_pitch():
     with pytest.raises(ValidationError):
         RunConfig.model_validate({"material": {"mass": math.nan}})
+    for value in (math.nan, math.inf, -math.inf):
+        with pytest.raises(ValidationError):
+            Material(rotational_viscosity=value)
     with pytest.raises(ValidationError, match="pitch"):
         RunConfig.model_validate({"material": {"pitch": 0.001, "strip_thickness": 0.002}})
 

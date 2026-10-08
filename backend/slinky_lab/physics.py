@@ -276,6 +276,57 @@ class Simulation:
             lengths[index] = length
         return vertices, frames, lengths
 
+    def _default_joint_damping(self) -> float:
+        """Return the MJCF default without applying viscosity to the free root."""
+
+        if self.config.material.rotational_viscosity is not None:
+            return 0.0
+        return float(self.config.material.damping)
+
+    def _effective_joint_damping(self, link_length: float) -> float:
+        """Resolve the ball-joint coefficient for one rest-shape link."""
+
+        viscosity = self.config.material.rotational_viscosity
+        if viscosity is None:
+            return float(self.config.material.damping)
+        if not math.isfinite(float(link_length)) or link_length <= 0.0:
+            raise ValueError("rotational viscosity requires finite positive rest link lengths")
+        return float(viscosity) / float(link_length)
+
+    def _damping_metadata(self) -> dict[str, Any]:
+        """Describe the input damping model and coefficients emitted into MJCF."""
+
+        material = self.config.material
+        lengths = np.asarray(self._rest_lengths[:-1], dtype=float)
+        if lengths.size == 0 or not np.all(np.isfinite(lengths)) or np.any(lengths <= 0.0):
+            raise ValueError("damping metadata requires finite positive rest link lengths")
+        viscosity = material.rotational_viscosity
+        if viscosity is None:
+            definition = "legacy_per_joint"
+            coefficients = np.full(lengths.shape, float(material.damping), dtype=float)
+            root_damping = 0.0
+        else:
+            definition = "rotational_viscosity_per_length"
+            coefficients = np.asarray([self._effective_joint_damping(length) for length in lengths], dtype=float)
+            root_damping = 0.0
+        return {
+            "definition": definition,
+            "input": {
+                "damping": float(material.damping),
+                "rotational_viscosity": None if viscosity is None else float(viscosity),
+                "rotational_viscosity_units": "N m^2 s",
+            },
+            "effective_range": {
+                "joint_damping_min_N_m_s": float(np.min(coefficients)),
+                "joint_damping_max_N_m_s": float(np.max(coefficients)),
+                "link_length_min_m": float(np.min(lengths)),
+                "link_length_max_m": float(np.max(lengths)),
+                "joint_count": int(coefficients.size),
+                "free_root_damping_N_m_s": root_damping,
+                "legacy_default_joint_damping_N_m_s": float(material.damping),
+            },
+        }
+
     def _build_composite_model_xml(self) -> str:
         material = self.config.material
         scene = self.config.scene
@@ -296,6 +347,7 @@ class Simulation:
         # complete turn therefore needs size[2] = 2 * turns.
         size = _vec3((self._height, material.radius, float(2 * material.turns)))
         box_size = _vec3((half_length, half_width, half_thickness))
+        default_damping = _xml_float(self._default_joint_damping())
         cable_plugin = """<plugin plugin=\"mujoco.elasticity.cable\">
           <config key=\"twist\" value=\"{twist}\"/>
           <config key=\"bend\" value=\"{bend}\"/>
@@ -320,7 +372,7 @@ class Simulation:
       </option>
       <size nconmax=\"{max(2000, self._segments * 12)}\" njmax=\"{max(2000, self._segments * 8)}\"/>
       <default>
-        <joint damping=\"{_xml_float(material.damping)}\" armature=\"0\"/>
+        <joint damping=\"{default_damping}\" armature=\"0\"/>
         <geom contype=\"1\" conaffinity=\"1\" friction=\"{friction}\"
               solref=\"{_xml_float(self.config.numerics.contact_time_constant)} 1\" solimp=\"0.95 0.99 0.001 0.5 2\"/>
       </default>
@@ -334,7 +386,7 @@ class Simulation:
                    count=\"{self._segments + 1} 1 1\" size=\"{size}\" offset=\"{offset}\"
                    quat=\"{quat}\" initial=\"free\">
           {cable_plugin}
-          <joint kind=\"main\" damping=\"{_xml_float(material.damping)}\" armature=\"0\"/>
+          <joint kind=\"main\" damping=\"{default_damping}\" armature=\"0\"/>
           <geom type=\"box\" size=\"{box_size}\" mass=\"{_xml_float(segment_mass)}\"
                 friction=\"{friction}\" rgba=\"0.1 0.6 0.8 1\" group=\"3\"/>
         </composite>
@@ -405,7 +457,7 @@ class Simulation:
                 ET.SubElement(body, "joint", {
                     "name": f"J_{index}",
                     "type": "ball",
-                    "damping": _xml_float(material.damping),
+                    "damping": _xml_float(self._effective_joint_damping(self._rest_lengths[index - 1])),
                     "armature": "0",
                 })
             ET.SubElement(body, "geom", {
@@ -1228,6 +1280,7 @@ class Simulation:
             "dt": self.dt,
             "steps": self._steps,
             "segment_count": self._segments,
+            "damping": self._damping_metadata(),
             "mass": {
                 "configured_kg": float(self.config.material.mass),
                 "model_kg": self._model_mass,
@@ -1321,6 +1374,7 @@ class Simulation:
             "section_axes": {"x": "centerline tangent", "y": "strip width", "z": "strip thickness"},
             "friction": {"self": self.config.material.self_friction, "environment": self.config.material.friction,
                          "combination": "terrain priority 1 selects environment friction; cable/cable uses self friction"},
+            "damping": self._damping_metadata(),
             "contact_solver": {"time_constant_s": self.config.numerics.contact_time_constant,
                                "damping_ratio": 1.0, "solimp": [0.95, 0.99, 0.001, 0.5, 2.0],
                                "note": "MuJoCo regularization; effective time constant is clipped to at least twice the timestep"},

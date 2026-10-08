@@ -19,6 +19,7 @@ class Material(StrictModel):
     young_modulus: float = Field(1.0e8, ge=1.0e4, le=3.0e11)
     shear_modulus: float = Field(3.7e7, ge=1.0e3, le=1.5e11)
     damping: float = Field(0.00001, ge=0, le=0.1)
+    rotational_viscosity: float | None = Field(None, ge=0, le=0.01)
     friction: float = Field(0.5, ge=0, le=3)
     self_friction: float = Field(0.5, ge=0, le=3)
 
